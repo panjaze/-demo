@@ -1,0 +1,20 @@
+/** terrain[gy][gx]：. 平原 / f 农田 / F 森林 / M 山地 / W 水域
+     * 不可建造 = F / M / W；可建造 = . / f
+     */
+    terrain: [
+      'MMMMMMMFFFF....WWFFF.FMWW.FFM',
+      'MMMMMMFFFFFF....WFF.FMWWWW.FF',
+      'MMMMM...FFFF....W.......W...M',
+      'MMMMM....FFFF..WW.F..ff..f..F',
+      'MMFFFF.....F...W..FM.......f.',
+      'MM.FF.M.ff.....W..M........ff',
+      'FF..FFFfff....W......f...FFf.',
+      'FFF.FFFF....WW.MWW......FFFFM',
+      '.F..........WFMMF.......FFFFM',
+      '....F.......WFMMM.........F.M',
+      'f...ff......WWM.......fff..MM',
+      '.....Ff.f....WWW.........FM.M',
+      '.......f.FFM...W..F......FFMM',
+      'FF....fffFFMF..W.FFFF.....MMM',
+      'MFMF..F...MM..WW.FFFFFFF.MMMM',
+    ],

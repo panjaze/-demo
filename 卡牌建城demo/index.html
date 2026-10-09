@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>卡牌建城 · 轻策略战争 Demo</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+  <div id="stage">
+    <canvas id="game" hidden></canvas>
+
+    <!-- ============ UI 层（逻辑坐标 1280×720，由引擎整体缩放） ============
+         网格制沙盘铺满 + 常驻手牌栏 + 右下角功能角标 + 弹出式抽卡/牌库
+    -->
+    <div id="ui">
+
+      <!-- ---------- 顶栏 ---------- -->
+      <header id="topbar">
+        <div class="tb-clock">
+          <span id="clock">15:00</span>
+          <span class="tb-sub" id="tickinfo">Tick 0 / 180</span>
+        </div>
+
+        <div class="tb-res">
+          <div class="res-item res-energy"><i>⚡</i><b id="res-energy">20</b><em>能量</em></div>
+          <div class="res-item res-food"><i>🌾</i><b id="res-food">40</b><em>粮食</em></div>
+        </div>
+
+        <div class="tb-mid">
+          <span class="tag tag-castle" id="tag-castle">主城 Lv1</span>
+          <span class="tag" id="tag-slots">建筑位 0 / 10</span>
+          <span class="tag" id="tag-soldiers">士兵 0 / 60</span>
+          <span id="policy-tray" title="颁布中的政策（最多 3 条）"></span>
+          <span id="event-meter" title="事件牌进度：填满时触发一张事件牌（可提前留刷新能量）">
+            <i id="event-bar-fill"></i><b id="event-bar-label">?</b>
+          </span>
+          <button id="btn-policy" class="tb-btn tb-btn-ghost" title="查看/颁布政策">政策</button>
+        </div>
+
+        <div class="tb-btns">
+          <span class="tag tag-dim" id="tag-phase">Phase 3a · 网格沙盘</span>
+          <button id="btn-menu" class="tb-btn tb-btn-ghost" title="暂停并回到主界面">主界面</button>
+          <button id="btn-pause" class="tb-btn">暂停</button>
+          <button id="btn-reset" class="tb-btn">重置</button>
+          <button id="btn-debug" class="tb-btn tb-btn-ghost">调参 `</button>
+        </div>
+      </header>
+
+      <!-- ---------- 主体 ---------- -->
+      <main id="main">
+
+        <!-- 沙盘：Canvas 铺满，城市格逐格对齐 -->
+        <section id="board">
+          <canvas id="sandbox"></canvas>
+          <div id="relic-tray" title="遗物：弃牌奖励获得，永久生效"></div>
+
+          <div class="board-head">
+            <span class="bh-title">沙盘</span>
+            <span class="muted">拖动平移 · 滚轮缩放 · 点我方部队再点建筑派兵 · 悬停顶栏资源看产出明细</span>
+            <span class="bh-right">
+              <button id="btn-recenter" class="bh-btn">⌖ 回城</button>
+              <span class="muted">可建 <b id="slot-count">0</b>/<b id="slot-max">10</b> 格</span>
+            </span>
+          </div>
+
+          <div id="hint" class="hint">点右下角「抽卡」翻 5 张 → 挑便宜的买 → 把手牌拖到地图空地上建造（必须与主城或己方建筑相邻）</div>
+
+          <!-- 选中建筑/主城时的操作条 -->
+          <div id="tile-actions" class="hidden">
+            <span id="ta-title"></span>
+            <button id="ta-upgrade" class="ta-btn ta-up"></button>
+            <button id="ta-demolish" class="ta-btn ta-del"></button>
+            <button id="ta-close" class="ta-close">×</button>
+          </div>
+
+          <!-- 右下角功能角标：牌库 / 抽卡 / 弃牌 -->
+          <div id="corner-ui">
+            <button class="corner-btn" data-modal="pool">
+              <span class="ck-icon">📚</span>
+              <b class="ck-badge" id="pool-count">0</b>
+              <em class="ck-label">牌库</em>
+            </button>
+            <button class="corner-btn corner-primary" data-modal="shop">
+              <span class="ck-icon">🎴</span>
+              <b class="ck-badge" id="shop-cost">1</b>
+              <em class="ck-label">抽卡</em>
+            </button>
+            <button class="corner-btn corner-danger" id="btn-discard">
+              <span class="ck-icon">🗑️</span>
+              <em class="ck-label">弃牌</em>
+            </button>
+            <button class="corner-btn corner-gold" data-modal="quest">
+              <span class="ck-icon">📋</span>
+              <b class="ck-badge" id="quest-star">☆0</b>
+              <em class="ck-label">任务</em>
+            </button>
+          </div>
+        </section>
+
+        <!-- 常驻手牌栏 -->
+        <section id="hand-bar">
+          <div class="row-head">
+            <span class="rh-title">手牌</span>
+            <span class="muted">拖到城市格建造 · 同类卡拖到已有建筑上可免一张升级牌升一级 · 效果牌原地点击即使用 · 拖动时右侧会出现 🗑️ 弃牌区</span>
+            <span class="muted hb-count" id="hand-count">0 / 5</span>
+          </div>
+          <div class="row-body">
+            <div id="hand-slots" class="card-row"></div>
+            <div class="hb-spacer"></div>
+            <div id="discard-zone" class="discard-zone"><span>🗑️</span>弃牌</div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- 资源产出明细（鼠标悬停顶栏三个资源时弹出） -->
+      <div id="res-tip" class="hidden"></div>
+
+      <!-- 胜负结算 -->
+      <div id="result-overlay" class="hidden">
+        <div id="result-card">
+          <div id="result-icon"></div>
+          <div id="result-title"></div>
+          <div id="result-sub"></div>
+          <div class="result-btns">
+            <button id="result-restart">再来一局</button>
+            <button id="result-menu" class="result-btn-ghost">回到主界面</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /#ui -->
+
+    <!-- ---------- 弹出层：抽卡 / 牌库 ---------- -->
+    <div id="modal" class="hidden">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span class="rh-title" id="modal-title">抽卡</span>
+          <span class="muted" id="modal-sub"></span>
+          <button id="modal-close" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div id="pane-shop" class="pane">
+            <div id="shop-cards" class="card-row"></div>
+            <div class="shop-foot">
+              <button id="btn-open" class="btn btn-primary">抽取 · 3 ⚡</button>
+              <div id="shop-hint" class="muted small">点击候选卡按标价买入 · 买完拖下方手牌到城市格建造</div>
+              <div id="shop-cur-cost" class="muted small"></div>
+            </div>
+          </div>
+          <div id="pane-reward" class="pane hidden">
+            <div id="reward-cards" class="reward-cards"></div>
+          </div>
+          <div id="pane-policy" class="pane hidden">
+            <div id="policy-cards" class="reward-cards"></div>
+            <div id="policy-hint" class="muted small"></div>
+          </div>
+          <div id="pane-quest" class="pane hidden">
+            <div id="quest-list"></div>
+          </div>
+          <div id="pane-pool" class="pane hidden">
+            <div id="pool-cards" class="pool-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- 主界面（覆盖层，最后渲染 → 永远在最上） ---------- -->
+    <div id="menu">
+      <div id="menu-bg"></div>
+      <div class="menu-inner">
+        <div class="menu-brand">
+          <h1 class="menu-title" id="menu-title">卡牌建城</h1>
+          <p class="menu-sub" id="menu-sub">轻策略战争 · 1v1 抽卡建城 Demo</p>
+        </div>
+
+        <div class="menu-btns" id="menu-btns">
+          <button class="menu-btn menu-btn-primary" data-act="start">开始游戏</button>
+          <button class="menu-btn" data-act="settings">设置</button>
+          <button class="menu-btn" data-act="help">玩法说明</button>
+          <button class="menu-btn" data-act="about">制作信息</button>
+        </div>
+
+        <div class="menu-panel hidden" id="menu-panel">
+          <div class="mp-head">
+            <span class="mp-title" id="mp-title"></span>
+            <button class="mp-close" id="mp-close" title="返回">×</button>
+          </div>
+          <div class="mp-body" id="mp-body"></div>
+        </div>
+
+        <div class="menu-foot">拖动沙盘平移 · 滚轮缩放 · <b>`</b> 唤出调参面板 · <b>Esc</b> 取消操作</div>
+      </div>
+    </div>
+
+  </div><!-- /#stage -->
+
+  <!-- 调试面板：按 ` 或 D 唤出 -->
+  <div id="debug" class="hidden">
+    <div class="dbg-head">调试面板 <span id="fps">60</span> fps
+      <button id="dbg-close">×</button>
+    </div>
+    <div id="dbg-body"></div>
+  </div>
+</div>
+
+<!-- 顺序不能改：engine -> config -> game -> sandbox -> ui -> menu -> main -->
+<script src="js/engine.js"></script>
+<script src="js/config.js"></script>
+<script src="js/game.js"></script>
+<script src="js/sandbox.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/menu.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

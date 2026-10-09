@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>迪迦清场 - 科技兵重构</title>
+<style>
+    body { margin: 0; padding: 0; background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; user-select: none; }
+    #gameCanvas { background: #2d2d2d; width: 100%; max-width: 375px; height: 100%; max-height: 667px; aspect-ratio: 375 / 667; box-shadow: 0 0 20px rgba(0,0,0,0.9); border: 1px solid #777; display: block; border-radius: 4px; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="375" height="667"></canvas>
+
+<script>
+window.onerror = function(msg, url, line, col, error) {
+    alert("🚨 游戏遇到错误，请把以下文字复制给我：\n" + msg + "\n所在行号: " + line);
+    return true;
+};
+
+console.log("✅ 最终提速版：AI保底后下一回合必出英雄，绝不拖延");
+
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
+        const r = typeof radii === 'number' ? radii : (Array.isArray(radii) ? radii[0] : 0);
+        const maxR = Math.min(w, h) / 2;
+        const cr = Math.min(r, maxR);
+        this.moveTo(x + cr, y);
+        this.arcTo(x + w, y, x + w, y + h, cr);
+        this.arcTo(x + w, y + h, x, y + h, cr);
+        this.arcTo(x, y + h, x, y, cr);
+        this.arcTo(x, y, x + w, y, cr);
+        this.closePath();
+        return this;
+    };
+}
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const COLS = 10, ROWS = 17, CELL = 30;
+const MAP_OFFSET_X = 37.5;
+const OFFSET_Y = 50; 
+const MAP_BOTTOM = OFFSET_Y + ROWS * CELL;
+const BOT_UI = 667 - MAP_BOTTOM;
+
+const MAP_TEMPLATE = [
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,3,2,2,2,2,2,2,3,2],
+    [0,3,2,2,2,2,2,2,3,2],
+    [0,2,2,2,2,2,2,2,2,2],
+    [0,0,0,0,0,0,0,0,0,0],
+    [2,3,2,2,2,2,2,2,3,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,3,2,2,2,2,2,2,3,2],
+    [0,3,2,2,2,2,2,2,3,2],
+    [0,2,2,2,2,2,2,2,2,2],
+    [0,0,0,0,0,0,0,0,0,0],
+    [2,3,2,2,2,2,2,2,3,0],
+    [0,0,0,0,0,0,0,0,0,0]
+];
+
+let MAP_P1 = MAP_TEMPLATE.map(row => [...row]);
+let MAP_P2 = MAP_TEMPLATE.map(row => [...row]);
+
+const PATH_TOP = [{r:0,c:9},{r:0,c:0},{r:4,c:0},{r:4,c:9},{r:6,c:9},{r:6,c:0}];
+const PATH_BOT = [{r:10,c:9},{r:10,c:0},{r:14,c:0},{r:14,c:9},{r:16,c:9},{r:16,c:0}];
+
+const state = {
+    p1: { energy: 20, baseHP: 150, hand: [null,null,null,null,null], skills: {} },
+    p2: { energy: 20, baseHP: 150, hand: [null,null,null,null,null], skills: {} },
+    units: Array.from({ length: ROWS }, () => Array(COLS).fill(null)),
+    monsters: [],
+    wave: 1, waveCountdown: 2, monstersSpawned: 0,
+    maxMonstersPerWave: 6,
+    aiTimer: 0.1,
+    nextWaveTimer: 0,
+    drag: { isDragging: false, isTouch: false, unit: null, owner: null, sourceType: null, sourceIndex: -1, offsetX: 0, offsetY: 0, fromHandIndex: -1, fromRow: -1, fromCol: -1, startX: 0, startY: 0, isHeroClick: false, heroUnit: null, heroRow: -1, heroCol: -1 },
+    attackEffects: [], attackFlash: [], unlockGlows: [],
+    gameOver: false, winner: null,
+    recruitCount: { p1: 0, p2: 0 },
+    paused: false, speedMultiplier: 1,
+    infoPanelUnit: null, infoPanelPos: null, recycleFlash: 0,
+    latestBuffSpd: Array.from({ length: ROWS }, () => Array(COLS).fill(0)),
+    heroProgress: {},
+    buffs: { p1_atk: 0, p1_spd: 0, p1_dur: 0, p2_atk: 0, p2_spd: 0, p2_dur: 0 },
+    aiHeroPairGuaranteed: false,
+    _wave10HeroCheck: false, _wave11HeroCheck: false,
+    pokedexVisible: false, pokedexSelectedHero: '迪迦', zetaForms: []
+};
+
+const ALL_WORDS = ['迪','迦','赛','罗','泰','泽','塔'];
+const PAIR_LIST = ['迪迦','赛罗','泰迦','泰罗','赛迦','泽塔'];
+const ALL_HEROES = ['迪迦','赛罗','泰迦','泰罗','赛迦','泽塔'];
+const TECH_BUFF = [0.03, 0.05, 0.07, 0.09, 0.12]; 
+const ZETA_FORM_CONFIG = { '原初': { atk: 0.10, spd: 0.10, slow: 0.00 }, '阿尔法装甲': { atk: 0.00, spd: 0.30, slow: 0.00 }, '贝塔冲击': { atk: 0.30, spd: 0.00, slow: 0.00 }, '伽马未来': { atk: 0.00, spd: 0.00, slow: 0.30 } };
+const HERO_SKILL_CONFIG = { '迪迦': { cd: 45, name: '哉佩利敖光线', desc: '全屏造成攻击×5伤害', canCast: function(owner, hero, data) { let enemies = state.monsters.filter(m => m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7))); return enemies.length >= 10; }, cast: function(owner, hero, data) { let dmg = hero.atk * 5; for (let m of state.monsters) { if (m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7))) { m.hp -= dmg; state.attackFlash.push({x: m.x, y: m.y, timer: 0.15}); } } state.attackEffects.push({ type: 'laser', sx: MAP_OFFSET_X, sy: OFFSET_Y, ex: MAP_OFFSET_X + COLS*30, ey: OFFSET_Y + ROWS*30, timer: 0.4, maxTimer: 0.4 }); } }, '赛罗': { cd: 30, name: '赛罗双射线', desc: '血量最高敌人攻击×15伤害,眩晕1秒', canCast: function(owner, hero, data) { let enemies = state.monsters.filter(m => m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7))); if (enemies.length === 0) return false; let target = enemies.reduce((a, b) => a.hp > b.hp ? a : b); data.target = target; return (target.hp >= target.maxHp * 0.5) || (enemies.length >= 5); }, cast: function(owner, hero, data) { let target = data.target; if (!target) return; target.hp -= hero.atk * 15; target._stunTimer = 1.0; state.attackFlash.push({x: target.x, y: target.y, timer: 0.2}); state.attackEffects.push({ type: 'explode', x: target.x, y: target.y, timer: 0.3, maxTimer: 0.3 }); } }, '泰罗': { cd: 50, name: '奥特炸弹', desc: '自身范围攻击×99伤害,沉睡10秒', canCast: function(owner, hero, data) { let cx = data.x, cy = data.y; let nearEnemies = state.monsters.filter(m => m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7)) && Math.hypot(m.x - cx, m.y - cy) < hero.range); return nearEnemies.length >= 5; }, cast: function(owner, hero, data) { let cx = data.x, cy = data.y; let dmg = hero.atk * 99; for (let m of state.monsters) { if (m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7)) && Math.hypot(m.x - cx, m.y - cy) < hero.range) { m.hp -= dmg; state.attackFlash.push({x: m.x, y: m.y, timer: 0.15}); } } hero.isSleeping = true; hero.sleepTimer = 10; state.attackEffects.push({ type: 'solar', x: cx, y: cy, timer: 0.5, maxTimer: 0.5, range: hero.range }); } }, '赛迦': { cd: 60, name: '究极赛迦领域', desc: '自身攻速/攻击+30%,范围敌人移速-30%,持续10秒', duration: 10, canCast: function(owner, hero, data) { let cx = data.x, cy = data.y; let nearEnemies = state.monsters.filter(m => m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7)) && Math.hypot(m.x - cx, m.y - cy) < hero.range); return nearEnemies.length >= 5; }, cast: function(owner, hero, data) { state.buffs[owner + '_atk'] = 0.30; state.buffs[owner + '_spd'] = 0.30; state.buffs[owner + '_dur'] = 10; let cx = data.x, cy = data.y; for (let m of state.monsters) { if (m.hp > 0 && ((owner === 'p1' && m.row >= 7) || (owner === 'p2' && m.row < 7)) && Math.hypot(m.x - cx, m.y - cy) < hero.range) { m._slowPct = Math.min(1, (m._slowPct || 0) + 0.30); } } state.unlockGlows.push({x: cx, y: cy, timer: 0.8}); } }, '泰迦': { cd: 70, name: '三重斯特利姆羁绊', desc: '全体攻击+10%,攻速+20%,持续5秒', duration: 5, canCast: function(owner, hero, data) { let cx = data.x, cy = data.y; let range = hero.range; let nearAllies = 0; for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.owner === owner && u !== hero && !u.isSleeping) { let ux = MAP_OFFSET_X + c*30 + 15; let uy = r*30 + 15 + OFFSET_Y; if (Math.hypot(ux - cx, uy - cy) < range) nearAllies++; } } } return nearAllies >= 6; }, cast: function(owner, hero, data) { let cx = data.x, cy = data.y; let range = hero.range; for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.owner === owner && u !== hero && !u.isSleeping) { let ux = MAP_OFFSET_X + c*30 + 15; let uy = r*30 + 15 + OFFSET_Y; if (Math.hypot(ux - cx, uy - cy) < range) { if (!u._taiga_buff_atk) u._taiga_buff_atk = 0; if (!u._taiga_buff_spd) u._taiga_buff_spd = 0; u._taiga_buff_atk = 0.10; u._taiga_buff_spd = 0.20; u._taiga_buff_dur = 5; } } } } state.unlockGlows.push({x: cx, y: cy, timer: 0.6}); } }, '泽塔': { name: '泽塔升华器', desc: '波次变化激活不同形态（原初/阿尔法/贝塔/伽马）' } };
+function updateZetaForms() { let wave = state.wave; if (wave <= 12) { let forms = ['原初', '阿尔法装甲', '贝塔冲击', '伽马未来']; let idx = (wave - 1) % 4; state.zetaForms = [forms[idx]]; } else if (wave <= 19) { let forms = ['原初', '阿尔法装甲', '贝塔冲击', '伽马未来']; let shuffled = [...forms].sort(() => Math.random() - 0.5); state.zetaForms = [shuffled[0], shuffled[1]]; } else { state.zetaForms = ['原初', '阿尔法装甲', '贝塔冲击', '伽马未来']; } }
+const HERO_CONFIG = { '赛罗': { color: '#9b59b6', maxLevel: 3, atk: [8.0, 12.8, 16.2], spd: [1.88, 2.44, 3.01], expToNext: [8, 23] }, '迪迦': { color: '#9b59b6', maxLevel: 3, atk: [8.0, 12.8, 16.2], spd: [1.88, 2.44, 3.01], expToNext: [8, 23] }, '泰罗': { color: '#9b59b6', maxLevel: 3, atk: [13.0, 18.0, 24.0], spd: [1.30, 1.69, 2.03], expToNext: [8, 23] }, '赛迦': { color: '#9b59b6', maxLevel: 3, atk: [13.0, 18.0, 24.0], spd: [1.30, 1.69, 2.03], expToNext: [8, 23] }, '泰迦': { color: '#9b59b6', maxLevel: 3, atk: [13.0, 18.0, 24.0], spd: [1.30, 1.69, 2.03], expToNext: [8, 23] }, '泽塔': { color: '#ffd700', maxLevel: 5, atk: [12.0, 24.0, 33.6, 43.68, 52.42], spd: [1.20, 1.56, 1.92, 2.34, 2.78], expToNext: [10, 35, 75, 130] } };
+function getHeroStats(name, level) { let config = HERO_CONFIG[name]; let idx = level - 1; let expToNext = (level < config.maxLevel) ? config.expToNext[idx] : 0; let range = (name === '迪迦' || name === '赛罗') ? 3.5 * 30 : (name === '泽塔' ? 3.0 * 30 : 2.5 * 30); return { atk: config.atk[idx], atkSpeed: config.spd[idx], range: range, hp: 200 + (level - 1) * 50, maxLevel: config.maxLevel, color: config.color, expToNext: expToNext }; }
+function createHeroUnit(name, owner, level) { let saved = state.heroProgress[name]; let lv = level || (saved ? saved.level : 1); let stats = getHeroStats(name, lv); let exp = (saved && !level) ? saved.exp : 0; let effect = (name === '迪迦' || name === '赛迦') ? 'laser' : (name === '泰罗' || name === '泰迦') ? 'explode' : (name === '赛罗') ? 'slash' : 'solar'; let skillData = { cooldown: 0, isReady: true }; if (name !== '泽塔') { let cfg = HERO_SKILL_CONFIG[name]; skillData.maxCooldown = cfg.cd; } else { skillData.maxCooldown = 0; } return { type: 'hero', name: name, level: lv, maxLevel: stats.maxLevel, color: stats.color, owner: owner, atk: stats.atk, atkSpeed: stats.atkSpeed, range: stats.range, hp: stats.hp, cooldown: 0, isSleeping: false, sleepTimer: 0, isHero: true, exp: exp, expToNext: stats.expToNext, _leftSleep: false, _rightSleep: false, effect: effect, skill: skillData }; }
+function createBaseUnit(type, lv, owner) { const statsMap = { infantry: { atk: [3, 4.5, 6.3, 8.19, 10.24], spd: [1.25, 1.88, 2.62, 3.41, 4.10], range: 2 * 30, aoe: false, effect: 'slash' }, vehicle: { atk: [2, 3, 4.2, 5.46, 6.82], spd: [0.90, 1.35, 1.89, 2.46, 3.07], range: 2.5 * 30, aoe: true, aoeRadius: 1.6 * 30, effect: 'explode' }, air: { atk: [2, 3, 4.2, 5.46, 6.82], spd: [1.25, 1.88, 2.62, 3.41, 4.10], range: 3.5 * 30, aoe: false, effect: 'laser' }, tech: { atk: [0, 0, 0, 0, 0], spd: [0, 0, 0, 0, 0], range: 2 * 30, aoe: false, effect: null } }; const colors = { infantry: ['#f5a623', '#f7b845', '#f9ce6e', '#ffd966', '#ffaa00'], vehicle: ['#e74c3c', '#ff6b6b', '#ff8a8a', '#ffa5a5', '#c0392b'], air: ['#50e3c2', '#70e6cc', '#90ead6', '#b0f0e5', '#20c4a0'], tech: ['#3498db', '#5dade2', '#85c1e9', '#aed6f1', '#2e86c1'] }; const texts = { infantry: ['人', '人', '人', '人', '人'], vehicle: ['车', '车', '车', '车', '车'], air: ['空', '空', '空', '空', '空'], tech: ['科', '科', '科', '科', '科'] }; const idx = lv - 1; return { type: type, level: lv, text: texts[type][idx], color: colors[type][idx], owner: owner, atk: statsMap[type].atk[idx], atkSpeed: statsMap[type].spd[idx], range: statsMap[type].range, hp: 150 + (lv - 1) * 30, cooldown: 0, isSleeping: false, isHero: false, aoe: statsMap[type].aoe, aoeRadius: statsMap[type].aoeRadius || 0, effect: statsMap[type].effect }; }
+function createBuilderUnit(owner) { return { type:'builder', level:0, text:'铲', color:'#f39c12', owner, atk:0, atkSpeed:0, range:0, hp:80, cooldown:0, isSleeping:false, isHero:false }; }
+function createWordUnit(word, owner) { return { type:'word', level:0, text:word, originalText:word, color:'#7f8c8d', owner, atk:0, atkSpeed:0, range:0, hp:60, cooldown:0, isSleeping:false, isHero:false }; }
+function upgradeUnit(unit) { if (unit.type !== 'hero') return false; let newLevel = unit.level + 1; if (newLevel > unit.maxLevel) return false; let stats = getHeroStats(unit.name, newLevel); unit.level = newLevel; unit.atk = stats.atk; unit.atkSpeed = stats.atkSpeed; unit.hp = stats.hp; unit.expToNext = stats.expToNext; unit.exp = 0; state.heroProgress[unit.name] = { level: unit.level, exp: unit.exp }; return true; }
+function addExp(unit, amount) { if (!unit || unit.type !== 'hero') return; if (unit.level >= unit.maxLevel) return; unit.exp += amount; while (unit.exp >= unit.expToNext && unit.level < unit.maxLevel) { upgradeUnit(unit); } }
+function handleKillExp(killer, owner) { if (killer && killer.type === 'hero') { addExp(killer, 1); } else { for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.type === 'hero' && u.owner === owner && !u.isSleeping) { addExp(u, 0.3); } } } } }
+function spawnMonster(path, owner) { const s = path[0]; let wave = state.wave; let hpBase; if (wave <= 3) hpBase = 10 + 2 * wave; else if (wave <= 5) hpBase = 10 + 4 * wave; else if (wave <= 10) hpBase = 10 + 7 * wave; else if (wave <= 16) hpBase = 10 + 9 * wave; else if (wave <= 20) hpBase = 10 + 13 * wave; else if (wave <= 25) hpBase = 10 + 18 * wave; else hpBase = 10 + 24 * wave; if (wave >= 6) hpBase = Math.floor(hpBase * 1.2); hpBase = Math.floor(hpBase); state.monsters.push({ path: path, pathIndex:0, owner: owner, hp: hpBase, maxHp: hpBase, speed: 25, row:s.r, col:s.c, x:MAP_OFFSET_X + s.c*30+15, y:s.r*30+15+OFFSET_Y, targetX:MAP_OFFSET_X + s.c*30+15, targetY:s.r*30+15+OFFSET_Y, reachedEnd:false, _slowPct: 0, _slowLevels: [], _stunTimer: 0 }); }
+
+let buffIndicators = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+
+function updateUnits(dt) { /* 玩家战斗逻辑绝对不变 */
+    buffIndicators = Array.from({ length: ROWS }, () => Array(COLS).fill(false)); state.latestBuffSpd = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    for (let owner of ['p1', 'p2']) {
+        if (state.buffs[owner + '_dur'] > 0) { state.buffs[owner + '_dur'] -= dt; if (state.buffs[owner + '_dur'] <= 0) { state.buffs[owner + '_atk'] = 0; state.buffs[owner + '_spd'] = 0; state.buffs[owner + '_dur'] = 0; } }
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.owner === owner && u.type !== 'hero') { if (u._taiga_buff_dur) { u._taiga_buff_dur -= dt; if (u._taiga_buff_dur <= 0) { u._taiga_buff_atk = 0; u._taiga_buff_spd = 0; u._taiga_buff_dur = 0; } } } }
+    }
+    for (let m of state.monsters) { if (m.hp > 0) { m._slowPct = 0; m._slowLevels = []; } }
+    let friendTechSources = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => []));
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++){ let u = state.units[r][c]; if(!u) continue; if (u.type === 'hero' && c > 0 && state.units[r][c-1] === u) continue; if (u.type === 'hero' && u.isSleeping) { u.sleepTimer -= dt; if (u.sleepTimer <= 0) { u.isSleeping = false; u.sleepTimer = 0; } continue; } if(u && u.type === 'tech' && !u.isSleeping) { let ux = MAP_OFFSET_X + c*30+15; let uy = r*30+15+OFFSET_Y; let R = 60.5; let sourceKey = r * COLS + c; for(let rr=Math.max(0,r-2); rr<=Math.min(ROWS-1,r+2); rr++){ for(let cc=Math.max(0,c-2); cc<=Math.min(COLS-1,c+2); cc++){ if (Math.abs(rr - r) > 2 || Math.abs(cc - c) > 2) continue; let target = state.units[rr][cc]; if(!target || target.owner !== u.owner || (rr===r && cc===c)) continue; if(target.type === 'tech') continue; let tx = MAP_OFFSET_X + cc*30+15; let ty = rr*30+15+OFFSET_Y; if(Math.hypot(tx-ux, ty-uy) <= R) { if (!friendTechSources[rr][cc].includes(sourceKey)) friendTechSources[rr][cc].push(sourceKey); } } } for (let m of state.monsters) { if (m.hp <= 0 || m.owner !== u.owner) continue; let dist = Math.hypot(m.x - ux, m.y - uy); if (dist <= R + 12) m._slowLevels.push(u.level); } } }
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++){ let sourceKeys = friendTechSources[r][c]; if (sourceKeys.length > 0) { let levels = []; for (let key of sourceKeys) { let tr = Math.floor(key / COLS); let tc = key % COLS; let techUnit = state.units[tr][tc]; if(techUnit) levels.push(techUnit.level); } levels.sort((a, b) => b - a); let top2 = levels.slice(0, 2); let totalBuff = 0; for (let lv of top2) totalBuff += TECH_BUFF[lv - 1]; state.latestBuffSpd[r][c] = totalBuff; if (totalBuff > 0) buffIndicators[r][c] = true; } }
+    for (let m of state.monsters) { if (m._slowLevels.length > 0) { m._slowLevels.sort((a, b) => b - a); let top2 = m._slowLevels.slice(0, 2); let totalSlow = 0; for (let lv of top2) totalSlow += TECH_BUFF[lv - 1]; m._slowPct = totalSlow; } }
+    for(let i=state.unlockGlows.length-1; i>=0; i--) { state.unlockGlows[i].timer -= dt; if(state.unlockGlows[i].timer <= 0) state.unlockGlows.splice(i,1); } if (state.recycleFlash > 0) state.recycleFlash -= dt;
+    for(let i=state.attackEffects.length-1; i>=0; i--) { state.attackEffects[i].timer -= dt; if(state.attackEffects[i].timer <= 0) state.attackEffects.splice(i,1); }
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++){ let u = state.units[r][c]; if(!u) continue; if (u.type === 'hero' && c > 0 && state.units[r][c-1] === u) continue; if (u.type === 'hero' && !u.isSleeping) { if (u.name === '泽塔') { } else { let sk = u.skill; if (sk) { if (!sk.isReady) { sk.cooldown -= dt; if (sk.cooldown <= 0) { sk.isReady = true; sk.cooldown = 0; } } if (sk.isReady) { let cfg = HERO_SKILL_CONFIG[u.name]; if (cfg) { let ux = MAP_OFFSET_X + c*30+15; let uy = r*30+15+OFFSET_Y; let data = { x: ux, y: uy, target: null }; if (cfg.canCast(u.owner, u, data)) { cfg.cast(u.owner, u, data); sk.isReady = false; sk.cooldown = cfg.cd; } } } } } } 
+        if (u.type === 'word') { if (u.owner === 'p1') continue; let currentMAP = (r < 7) ? MAP_P2 : (r >= 10 ? MAP_P1 : null); if (currentMAP === null) continue; if (c < COLS - 1) { let right = state.units[r][c+1]; if (right && right.type === 'word' && !right.isSleeping && right.owner === u.owner && currentMAP[r][c] === 3 && currentMAP[r][c+1] === 3) { let pair = u.originalText + right.originalText; if (PAIR_LIST.includes(pair)) { if (ensureTwoAdjacentSpaces(r, c, u.owner)) { let hero = createHeroUnit(pair, u.owner); hero._leftSleep = u.isSleeping; hero._rightSleep = right.isSleeping; state.units[r][c] = hero; state.units[r][c+1] = hero; state.unlockGlows.push({x: MAP_OFFSET_X + c*30+15, y: r*30+15+OFFSET_Y, timer: 0.5}); continue; } } } } if (c > 0) { let left = state.units[r][c-1]; if (left && left.type === 'word' && !left.isSleeping && left.owner === u.owner && currentMAP[r][c-1] === 3 && currentMAP[r][c] === 3) { let pair = left.originalText + u.originalText; if (PAIR_LIST.includes(pair)) { if (ensureTwoAdjacentSpaces(r, c-1, u.owner)) { let hero = createHeroUnit(pair, u.owner); hero._leftSleep = left.isSleeping; hero._rightSleep = u.isSleeping; state.units[r][c-1] = hero; state.units[r][c] = hero; state.unlockGlows.push({x: MAP_OFFSET_X + (c-1)*30+15, y: r*30+15+OFFSET_Y, timer: 0.5}); continue; } } } } continue; }
+        if (u.type === 'hero' || (u.type !== 'builder' && u.type !== 'word' && u.type !== 'tech')) {
+            if(u.isSleeping) continue; if(u.cooldown > 0) { u.cooldown -= dt; continue; }
+            let ownerBuffAtk = state.buffs[u.owner + '_atk'] || 0; let ownerBuffSpd = state.buffs[u.owner + '_spd'] || 0;
+            let zetaAtkBuff = 0, zetaSpdBuff = 0, zetaSlowPct = 0;
+            if (u.name === '泽塔') { let forms = state.zetaForms || ['原初']; for (let f of forms) { let formData = ZETA_FORM_CONFIG[f]; zetaAtkBuff += formData.atk; zetaSpdBuff += formData.spd; zetaSlowPct += formData.slow; } if (zetaSlowPct > 0) { let ux = MAP_OFFSET_X + c*30+15; let uy = r*30+15+OFFSET_Y; for (let m of state.monsters) { if (m.hp > 0 && ((u.owner === 'p1' && m.row >= 7) || (u.owner === 'p2' && m.row < 7)) && Math.hypot(m.x - ux, m.y - uy) < u.range) { m._slowPct = Math.min(1, (m._slowPct || 0) + zetaSlowPct); } } } }
+            let taigaAtkBuff = u._taiga_buff_atk || 0; let taigaSpdBuff = u._taiga_buff_spd || 0;
+            let finalFreq = u.atkSpeed * (1 + state.latestBuffSpd[r][c] + ownerBuffSpd + zetaSpdBuff + taigaSpdBuff); let effCd = 1 / finalFreq;
+            let effAtk = u.atk * (1 + ownerBuffAtk + zetaAtkBuff + taigaAtkBuff); if (u.owner === 'p2') effAtk *= 1.2;
+            let ux = MAP_OFFSET_X + c*30+15, uy = r*30+15+OFFSET_Y; let target = null, minDist = Infinity;
+            if (u.type === 'vehicle') { let targetsInRange = []; for(let m=state.monsters.length-1; m>=0; m--){ let mon = state.monsters[m]; if(mon.owner !== u.owner || mon.hp<=0) continue; let dist = Math.hypot(mon.x-ux, mon.y-uy); if(dist < u.range) targetsInRange.push(mon); } if(targetsInRange.length > 0){ for(let m of targetsInRange){ m.hp -= effAtk; state.attackFlash.push({x: m.x, y: m.y, timer: 0.08}); state.attackEffects.push({ type: 'explode', x: m.x, y: m.y, timer: 0.25, maxTimer: 0.25 }); if(m.hp <= 0){ let idx = state.monsters.indexOf(m); if(idx > -1){ state.monsters.splice(idx, 1); if(u.owner === 'p1') state.p1.energy += 1; else state.p2.energy += 1; handleKillExp(u, u.owner); } } } u.cooldown = effCd; } continue; }
+            if (u.name === '泽塔') { let hitAny = false; for(let idx=state.monsters.length-1; idx>=0; idx--){ let m = state.monsters[idx]; if (m.hp > 0 && ((u.owner === 'p1' && m.row >= 7) || (u.owner === 'p2' && m.row < 7))) { let dist = Math.hypot(m.x - ux, m.y - uy); if (dist < u.range) { m.hp -= effAtk; state.attackFlash.push({x: m.x, y: m.y, timer: 0.08}); if (m.hp <= 0) { state.monsters.splice(idx, 1); if (u.owner === 'p1') state.p1.energy += 1; else state.p2.energy += 1; handleKillExp(u, u.owner); } hitAny = true; } } } if (hitAny) { state.attackEffects.push({ type: 'solar', x: ux, y: uy, timer: 0.5, maxTimer: 0.5, range: u.range }); u.cooldown = effCd; continue; } }
+            for(let m=state.monsters.length-1; m>=0; m--){ let mon = state.monsters[m]; if(mon.owner !== u.owner || mon.hp<=0) continue; let dist = Math.hypot(mon.x-ux, mon.y-uy); if(dist < u.range && dist < minDist){ minDist = dist; target = mon; } }
+            if(target){ target.hp -= effAtk; state.attackFlash.push({x: target.x, y: target.y, timer: 0.08}); if (u.effect && u.effect !== 'solar') { let effectObj; if (u.effect === 'slash') effectObj = { type: 'slash', x: target.x, y: target.y, timer: 0.15, maxTimer: 0.15 }; else if (u.effect === 'laser') effectObj = { type: 'laser', sx: ux, sy: uy, ex: target.x, ey: target.y, timer: 0.12, maxTimer: 0.12 }; else if (u.effect === 'explode') effectObj = { type: 'explode', x: target.x, y: target.y, timer: 0.25, maxTimer: 0.25 }; if (effectObj) state.attackEffects.push(effectObj); } if (u.aoe && u.aoeRadius) { for (let m2Idx = state.monsters.length - 1; m2Idx >= 0; m2Idx--) { let m2 = state.monsters[m2Idx]; if (m2 !== target && m2.owner === u.owner && m2.hp > 0) { let dist2 = Math.hypot(m2.x - target.x, m2.y - target.y); if (dist2 < u.aoeRadius) { m2.hp -= Math.floor(effAtk * 0.70); state.attackFlash.push({x: m2.x, y: m2.y, timer: 0.08}); if (m2.hp <= 0) { if (u.owner === 'p1') state.p1.energy += 1; else state.p2.energy += 1; handleKillExp(u, u.owner); state.monsters.splice(m2Idx, 1); } } } } } if(target.hp <= 0){ let idx = state.monsters.indexOf(target); if(idx > -1) { state.monsters.splice(idx, 1); if(u.owner === 'p1') state.p1.energy += 1; else state.p2.energy += 1; handleKillExp(u, u.owner); } } u.cooldown = effCd; } } }
+    for(let i=state.attackFlash.length-1; i>=0; i--){ state.attackFlash[i].timer -= dt; if(state.attackFlash[i].timer <= 0) state.attackFlash.splice(i,1); }
+}
+function updateMonsters(dt) { for(let i=state.monsters.length-1; i>=0; i--){ let m = state.monsters[i]; if(m.hp<=0){ state.monsters.splice(i, 1); continue; } if(m.reachedEnd) continue; if (m._stunTimer > 0) { m._stunTimer -= dt; continue; } let dx = m.targetX - m.x; let dy = m.targetY - m.y; let dist = Math.hypot(dx, dy); if (dist < 2) { m.x = m.targetX; m.y = m.targetY; m.pathIndex++; if(m.pathIndex >= m.path.length){ m.reachedEnd = true; if(m.owner === 'p1') { state.p1.baseHP -= 25; state.p1.energy += 10; } else { state.p2.baseHP -= 25; state.p2.energy += 10; } state.monsters.splice(i,1); continue; } let next = m.path[m.pathIndex]; m.targetX = MAP_OFFSET_X + next.c*30+15; m.targetY = next.r*30+15+OFFSET_Y; } else { let baseSpeed = m.speed; let slowPct = m._slowPct || 0; let speed = baseSpeed * (1 - slowPct) * dt; if (Math.abs(dx) > 0.5) { let stepX = Math.min(Math.abs(dx), speed) * Math.sign(dx); m.x += stepX; speed -= Math.abs(stepX); if (speed > 0 && Math.abs(dy) > 0.5) { let stepY = Math.min(Math.abs(dy), speed) * Math.sign(dy); m.y += stepY; } } else { let stepY = Math.min(Math.abs(dy), speed) * Math.sign(dy); m.y += stepY; } } } }
+function cancelDrag() { state.drag.isDragging = false; state.drag.isTouch = false; state.drag.unit = null; state.drag.owner = null; state.drag.sourceType = null; state.drag.sourceIndex = -1; state.drag.fromHandIndex = -1; state.drag.fromRow = -1; state.drag.fromCol = -1; state.drag.offsetX = 0; state.drag.offsetY = 0; }
+function ensureTwoAdjacentSpaces(row, col1, owner) { let col2 = col1 + 1; if (col2 >= COLS) return false; let map = owner === 'p1' ? MAP_P1 : MAP_P2; if (map[row][col1] !== 3 || map[row][col2] !== 3) return false; let unit1 = state.units[row][col1]; if (unit1 && unit1.owner === owner) { if (unit1.type === 'word') state.units[row][col1] = null; else return false; } let unit2 = state.units[row][col2]; if (unit2 && unit2.owner === owner) { if (unit2.type === 'word') state.units[row][col2] = null; else return false; } return state.units[row][col1] === null && state.units[row][col2] === null; }
+
+function tryPlaceUnit(unit, owner, preferredHandIdx, preferredRow, preferredCol) {
+    if (preferredHandIdx !== -1 && preferredHandIdx < 5 && state[owner].hand[preferredHandIdx] === null) { state[owner].hand[preferredHandIdx] = unit; return true; }
+    if (preferredRow >= 0 && preferredCol >= 0 && MAP_P1[preferredRow][preferredCol] === 3 && state.units[preferredRow][preferredCol] === null) { state.units[preferredRow][preferredCol] = unit; return true; }
+    for (let i = 0; i < 5; i++) { if (state[owner].hand[i] === null) { state[owner].hand[i] = unit; return true; } }
+    let dirs = [[0,1],[0,-1],[1,0],[-1,0]]; for (let d of dirs) { let nr = preferredRow + d[0], nc = preferredCol + d[1]; if (nr >= 10 && nr < ROWS && nc >= 0 && nc < COLS && MAP_P1[nr][nc] === 3 && state.units[nr][nc] === null) { state.units[nr][nc] = unit; return true; } }
+    if (preferredRow >= 0 && preferredCol >= 0 && preferredRow < ROWS && preferredCol < COLS) { state.units[preferredRow][preferredCol] = unit; return true; }
+    return false;
+}
+
+// ===== 【AI极速改版】：新增“开荒和清兵”逻辑，保证保底后下回合必定出英雄 =====
+function updateAI(dt) {
+    state.aiTimer -= Math.min(dt, 0.05);
+    if (state.aiTimer > 0 || state.gameOver) return;
+    state.aiTimer = 0.05 + Math.random() * 0.08; 
+    let p = state.p2; let owner = 'p2'; function isWhite(r, c) { return r >= 0 && r < 7 && c >= 0 && c < COLS && MAP_P2[r][c] === 3; }
+
+    if (state.aiHeroPairGuaranteed) {
+        let randomPair = PAIR_LIST[Math.floor(Math.random() * PAIR_LIST.length)];
+        let char1 = randomPair[0], char2 = randomPair[1];
+        p.hand = [createBuilderUnit(owner), createBuilderUnit(owner), createBuilderUnit(owner), createWordUnit(char1, owner), createWordUnit(char2, owner)];
+        state.aiHeroPairGuaranteed = false;
+        console.log(`[AI硬核保底] 强制替换手牌：3铲 + ${char1} + ${char2}`);
+        return;
+    }
+
+    let mapUnits = []; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.owner === owner && !u.isSleeping) mapUnits.push({unit: u, r, c}); } } let handUnits = []; for (let i = 0; i < 5; i++) if (p.hand[i]) handUnits.push({unit: p.hand[i], idx: i});
+
+    // ==============================================
+    // 【第一优先】AI 手牌合激进成 (支持开荒和清理)
+    // ==============================================
+    for (let i = 0; i < 5; i++) {
+        for (let j = i + 1; j < 5; j++) {
+            let a = p.hand[i], b = p.hand[j];
+            if (a && b && a.type === 'word' && b.type === 'word') {
+                let pair = PAIR_LIST.includes(a.originalText + b.originalText) ? a.originalText + b.originalText : (PAIR_LIST.includes(b.originalText + a.originalText) ? b.originalText + a.originalText : null);
+                if (pair) {
+                    // 1. 寻找现成的2个相邻空白格
+                    for (let rr = 0; rr < 7; rr++) {
+                        for (let cc = 0; cc < COLS - 1; cc++) {
+                            if (MAP_P2[rr][cc] === 3 && MAP_P2[rr][cc+1] === 3 && !state.units[rr][cc] && !state.units[rr][cc+1]) {
+                                let hero = createHeroUnit(pair, owner);
+                                state.units[rr][cc] = hero; state.units[rr][cc+1] = hero;
+                                p.hand[i] = null; p.hand[j] = null;
+                                state.unlockGlows.push({x: MAP_OFFSET_X + cc*30+15, y: rr*30+15+OFFSET_Y, timer: 0.5});
+                                console.log(`[AI手牌激进度] 立即占位合成：${pair}`);
+                                return;
+                            }
+                        }
+                    }
+
+                    // 2. 如果没位置，检查手牌里是否有铲子：开垦相邻的白格+灰格
+                    let builderIdx = -1; for (let k=0; k<5; k++) if (p.hand[k] && p.hand[k].type === 'builder') { builderIdx = k; break; }
+                    if (builderIdx !== -1) {
+                        for (let rr = 0; rr < 7; rr++) {
+                            for (let cc = 0; cc < COLS - 1; cc++) {
+                                // 左白右灰
+                                if (MAP_P2[rr][cc] === 3 && MAP_P2[rr][cc+1] === 2 && !state.units[rr][cc] && !state.units[rr][cc+1]) {
+                                    MAP_P2[rr][cc+1] = 3; // 用铲子开垦
+                                    p.hand[builderIdx] = null; // 消耗铲子
+                                    let hero = createHeroUnit(pair, owner);
+                                    state.units[rr][cc] = hero; state.units[rr][cc+1] = hero;
+                                    p.hand[i] = null; p.hand[j] = null;
+                                    state.unlockGlows.push({x: MAP_OFFSET_X + cc*30+15, y: rr*30+15+OFFSET_Y, timer: 0.5});
+                                    console.log(`[AI手牌激进度] 铲子开荒合成：${pair}`);
+                                    return;
+                                }
+                                // 左灰右白
+                                if (MAP_P2[rr][cc] === 2 && MAP_P2[rr][cc+1] === 3 && !state.units[rr][cc] && !state.units[rr][cc+1]) {
+                                    MAP_P2[rr][cc] = 3; // 用铲子开垦
+                                    p.hand[builderIdx] = null; // 消耗铲子
+                                    let hero = createHeroUnit(pair, owner);
+                                    state.units[rr][cc] = hero; state.units[rr][cc+1] = hero;
+                                    p.hand[i] = null; p.hand[j] = null;
+                                    state.unlockGlows.push({x: MAP_OFFSET_X + cc*30+15, y: rr*30+15+OFFSET_Y, timer: 0.5});
+                                    console.log(`[AI手牌激进度] 铲子开荒合成：${pair}`);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ==============================================
+    // 【第二优先】AI 地图+手牌替换合成
+    // ==============================================
+    for (let m of mapUnits) {
+        if (m.unit.type !== 'word') continue;
+        let mapChar = m.unit.originalText;
+        for (let h of handUnits) {
+            if (h.unit.type !== 'word') continue;
+            let handChar = h.unit.originalText;
+            let pair1 = mapChar + handChar, pair2 = handChar + mapChar;
+            let pair = PAIR_LIST.includes(pair1) ? pair1 : (PAIR_LIST.includes(pair2) ? pair2 : null);
+            if (pair) {
+                let dirs = [[0,1], [0,-1]];
+                for (let d of dirs) {
+                    let nr = m.r + d[0], nc = m.c + d[1];
+                    if (nr >= 0 && nr < 7 && nc >= 0 && nc < COLS && MAP_P2[nr][nc] === 3) {
+                        let target = state.units[nr][nc];
+                        let leftCol = Math.min(m.c, nc);
+                        
+                        // 情况A：目标位置完全空着
+                        if (!target) {
+                            let hero = createHeroUnit(pair, owner);
+                            state.units[m.r][leftCol] = hero; state.units[m.r][leftCol+1] = hero;
+                            p.hand[h.idx] = null;
+                            state.unlockGlows.push({x: MAP_OFFSET_X + leftCol*30+15, y: m.r*30+15+OFFSET_Y, timer: 0.5});
+                            console.log(`[AI智能合成] 地图${mapChar}+手牌${handChar}=${pair}`);
+                            return;
+                        } 
+                        // 情况B：目标位置被非英雄/非字堵住了
+                        else if (target.owner === owner && target.type !== 'word' && target.type !== 'hero' && target.type !== 'builder') {
+                            // 强行腾出手牌位（如果能找到）
+                            let emptySlot = -1;
+                            for (let i=0; i<5; i++) if (p.hand[i] === null) { emptySlot = i; break; }
+                            // 如果手牌满了，尝试消耗掉一个铲子来腾出位置
+                            if (emptySlot === -1) {
+                                for (let i=0; i<5; i++) if (p.hand[i] && p.hand[i].type === 'builder') { emptySlot = i; break; }
+                            }
+                            if (emptySlot !== -1) {
+                                p.hand[emptySlot] = target;
+                                state.units[nr][nc] = null;
+                                let hero = createHeroUnit(pair, owner);
+                                state.units[m.r][leftCol] = hero; state.units[m.r][leftCol+1] = hero;
+                                p.hand[h.idx] = null;
+                                state.unlockGlows.push({x: MAP_OFFSET_X + leftCol*30+15, y: m.r*30+15+OFFSET_Y, timer: 0.5});
+                                console.log(`[AI智能合成] 替换兵种成功！地图${mapChar}+手牌${handChar}=${pair}`);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ==============================================
+    // 【第三优先】AI 地图自动合成
+    // ==============================================
+    for (let i = 0; i < mapUnits.length; i++) {
+        for (let j = i + 1; j < mapUnits.length; j++) {
+            let a = mapUnits[i], b = mapUnits[j];
+            if (a.unit.type === 'word' && b.unit.type === 'word') {
+                let leftCol = Math.min(a.c, b.c), rightCol = Math.max(a.c, b.c);
+                if (rightCol !== leftCol + 1) continue;
+                if (!((a.c === leftCol && b.c === rightCol) || (b.c === leftCol && a.c === rightCol))) continue;
+                let pair1 = a.unit.originalText + b.unit.originalText;
+                let pair2 = b.unit.originalText + a.unit.originalText;
+                let pair = PAIR_LIST.includes(pair1) ? pair1 : (PAIR_LIST.includes(pair2) ? pair2 : null);
+                if (pair && ensureTwoAdjacentSpaces(a.r, leftCol, owner)) {
+                    let hero = createHeroUnit(pair, owner);
+                    hero._leftSleep = a.unit.isSleeping; hero._rightSleep = b.unit.isSleeping;
+                    state.units[a.r][leftCol] = hero; state.units[a.r][rightCol] = hero;
+                    state.unlockGlows.push({x: MAP_OFFSET_X + leftCol*30+15, y: a.r*30+15+OFFSET_Y, timer: 0.5});
+                    console.log(`[AI地图] 相邻字合成：${pair}`);
+                    return;
+                }
+            }
+        }
+    }
+
+    // ==============================================
+    // 【次高】基础兵种合并
+    // ==============================================
+    for (let m of mapUnits) { let u = m.unit; if (u.type !== 'infantry' && u.type !== 'vehicle' && u.type !== 'air' && u.type !== 'tech') continue; if (u.level >= 5) continue; for (let h of handUnits) { if (h.unit.type === u.type && h.unit.level === u.level) { if (isWhite(m.r, m.c)) { let newUnit = createBaseUnit(u.type, u.level + 1, owner); state.units[m.r][m.c] = newUnit; p.hand[h.idx] = null; state.unlockGlows.push({x: MAP_OFFSET_X + m.c*30+15, y: m.r*30+15+OFFSET_Y, timer: 0.3}); return; } } } }
+    for (let i = 0; i < mapUnits.length; i++) { for (let j = i + 1; j < mapUnits.length; j++) { let a = mapUnits[i], b = mapUnits[j]; if ((a.unit.type === 'infantry' || a.unit.type === 'vehicle' || a.unit.type === 'air' || a.unit.type === 'tech') && a.unit.type === b.unit.type && a.unit.level === b.unit.level && a.unit.level < 5) { if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) <= 2) { let newUnit = createBaseUnit(a.unit.type, a.unit.level + 1, owner); state.units[a.r][a.c] = newUnit; state.units[b.r][b.c] = null; state.unlockGlows.push({x: MAP_OFFSET_X + a.c*30+15, y: a.r*30+15+OFFSET_Y, timer: 0.3}); return; } if (isWhite(a.r, a.c)) { for (let d of [[0,1], [0,-1], [1,0], [-1,0]]) { let nr = a.r + d[0], nc = a.c + d[1]; if (!isWhite(nr, nc)) continue; if (state.units[nr][nc] && state.units[nr][nc] !== b.unit) continue; state.units[a.r][a.c] = null; state.units[b.r][b.c] = null; let newUnit = createBaseUnit(a.unit.type, a.unit.level + 1, owner); state.units[a.r][a.c] = newUnit; state.unlockGlows.push({x: MAP_OFFSET_X + a.c*30+15, y: a.r*30+15+OFFSET_Y, timer: 0.3}); return; } } if (isWhite(b.r, b.c)) { for (let d of [[0,1], [0,-1], [1,0], [-1,0]]) { let nr = b.r + d[0], nc = b.c + d[1]; if (!isWhite(nr, nc)) continue; if (state.units[nr][nc] && state.units[nr][nc] !== a.unit) continue; state.units[a.r][a.c] = null; state.units[b.r][b.c] = null; let newUnit = createBaseUnit(a.unit.type, a.unit.level + 1, owner); state.units[b.r][b.c] = newUnit; state.unlockGlows.push({x: MAP_OFFSET_X + b.c*30+15, y: b.r*30+15+OFFSET_Y, timer: 0.3}); return; } } } } }
+
+    // ==============================================
+    // 【最后】连续铺场
+    // ==============================================
+    let deployedCount = 0; while (true) {
+        if (deployedCount > 10) break;
+        let hasEmptySlot = false; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { if (isWhite(r, c) && !state.units[r][c]) { hasEmptySlot = true; break; } } if (hasEmptySlot) break; } if (!hasEmptySlot) break;
+        let emptyWhiteCount = 0; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { if (isWhite(r, c) && !state.units[r][c]) emptyWhiteCount++; } }
+        let deployable = []; for (let i = 0; i < 5; i++) { let u = p.hand[i]; if (u && u.type !== 'builder') { if (u.type === 'word') { if (emptyWhiteCount > 4) deployable.push({unit: u, idx: i}); } else { deployable.push({unit: u, idx: i}); } } } if (deployable.length === 0) break;
+        let bestUnit = null; let combatUnits = deployable.filter(u => u.unit.type !== 'word'); if (combatUnits.length > 0) { let tech = combatUnits.find(u => u.unit.type === 'tech'); if (tech) bestUnit = tech; else { combatUnits.sort((a, b) => b.unit.level - a.unit.level); bestUnit = combatUnits[0]; } } else { bestUnit = deployable[0]; }
+        let targetPos = null; let foundMergeTarget = false; if (bestUnit.unit.type !== 'word') { for (let m of mapUnits) { let mu = m.unit; if (mu.type === bestUnit.unit.type && mu.level === bestUnit.unit.level && mu.level < 5) { let mPos = { r: m.r, c: m.c }; for (let d of [[0,1], [0,-1], [1,0], [-1,0]]) { let nr = mPos.r + d[0], nc = mPos.c + d[1]; if (isWhite(nr, nc) && !state.units[nr][nc]) { targetPos = { r: nr, c: nc }; foundMergeTarget = true; break; } } if (foundMergeTarget) break; } } }
+        if (!foundMergeTarget) { let bestScore = -Infinity; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { if (isWhite(r, c) && !state.units[r][c]) { if (bestUnit.unit.type === 'hero') { if (c >= COLS - 1) continue; if (!isWhite(r, c + 1) || state.units[r][c + 1]) continue; } let score = 100 - (Math.abs(r - 3) + Math.abs(c - 5)) * 10; for (let d of [[0,1], [0,-1], [1,0], [-1,0]]) { let nr = r + d[0], nc = c + d[1]; if (nr >= 0 && nr < 7 && nc >= 0 && nc < COLS && state.units[nr][nc] && state.units[nr][nc].type === 'tech' && state.units[nr][nc].owner === owner) score += 30; } if (score > bestScore) { bestScore = score; targetPos = { r, c }; } } } } }
+        if (!targetPos) break; if (MAP_P2[targetPos.r][targetPos.c] !== 3) continue; let checkTarget = state.units[targetPos.r][targetPos.c]; if (checkTarget && checkTarget.type === 'hero') continue; if (targetPos.c > 0 && state.units[targetPos.r][targetPos.c - 1] && state.units[targetPos.r][targetPos.c - 1].type === 'hero' && state.units[targetPos.r][targetPos.c] === state.units[targetPos.r][targetPos.c - 1]) continue;
+        if (bestUnit.unit.type === 'hero') { if (targetPos.c >= COLS - 1) continue; if (!isWhite(targetPos.r, targetPos.c + 1) || state.units[targetPos.r][targetPos.c + 1]) continue; state.units[targetPos.r][targetPos.c] = bestUnit.unit; state.units[targetPos.r][targetPos.c + 1] = bestUnit.unit; } else { state.units[targetPos.r][targetPos.c] = bestUnit.unit; } p.hand[bestUnit.idx] = null; deployedCount++; } 
+    if (deployedCount > 0) return;
+
+    // ========== AI 铲子逻辑 ==========
+    let builderIdx = -1; for (let i = 0; i < 5; i++) { if (p.hand[i] && p.hand[i].type === 'builder') { builderIdx = i; break; } }
+    if (builderIdx !== -1) { let target = null; let bestBuildScore = -Infinity; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { if (MAP_P2[r][c] === 2) { let score = 100 - (Math.abs(r - 3) * 5 + Math.abs(c - 1) * 5); if (r === 3) score += 10; if (score > bestBuildScore) { bestBuildScore = score; target = { r, c }; } } } } if (target) { MAP_P2[target.r][target.c] = 3; p.hand[builderIdx] = null; state.unlockGlows.push({x: MAP_OFFSET_X + target.c*30+15, y: target.r*30+15+OFFSET_Y, timer: 0.3}); return; } else { p.hand[builderIdx] = null; return; } }
+
+    // ===== AI 征兵逻辑 =====
+    let cost = 10 + (state.recruitCount.p2 > 0 ? (state.recruitCount.p2 - 1) * 2 : 0); let emptyIndices = []; for (let i = 0; i < 5; i++) { if (!p.hand[i]) emptyIndices.push(i); }
+    if (emptyIndices.length === 0) { if (p.energy >= cost) { p.energy -= cost; p.hand = [null, null, null, null, null]; let builtBuilder = false; for (let i = 0; i < 5; i++) { let unit, rand, word = ALL_WORDS[Math.floor(Math.random() * ALL_WORDS.length)]; let isFirstRecruit = state.recruitCount.p2 === 1; if (isFirstRecruit && i === 0) { unit = createBuilderUnit(owner); builtBuilder = true; } else { do { rand = Math.random(); let pBase = (state.wave >= 6) ? [0.18, 0.18, 0.18, 0.15, 0.15, 0.16] : [0.20, 0.20, 0.20, 0.15, 0.15, 0.10]; if (rand < pBase[0]) unit = createBaseUnit('infantry', 1, owner); else if (rand < pBase[0] + pBase[1]) unit = createBaseUnit('vehicle', 1, owner); else if (rand < pBase[0] + pBase[1] + pBase[2]) unit = createBaseUnit('air', 1, owner); else if (rand < pBase[0] + pBase[1] + pBase[2] + pBase[3]) unit = createBaseUnit('tech', 1, owner); else if (rand < pBase[0] + pBase[1] + pBase[2] + pBase[3] + pBase[4]) unit = createBuilderUnit(owner); else unit = createWordUnit(word, owner); } while (isFirstRecruit && unit.type === 'builder' && builtBuilder); } p.hand[i] = unit; } state.recruitCount.p2++; return; } }
+    if (emptyIndices.length > 0 && p.energy >= cost) { p.energy -= cost; let builtBuilder = false; for (let idx = 0; idx < emptyIndices.length; idx++) { let slot = emptyIndices[idx]; let unit, rand, word = ALL_WORDS[Math.floor(Math.random() * ALL_WORDS.length)]; let isFirstRecruit = state.recruitCount.p2 === 1; if (isFirstRecruit && idx === 0) { unit = createBuilderUnit(owner); builtBuilder = true; } else { do { rand = Math.random(); let pBase = (state.wave >= 6) ? [0.18, 0.18, 0.18, 0.15, 0.15, 0.16] : [0.20, 0.20, 0.20, 0.15, 0.15, 0.10]; if (rand < pBase[0]) unit = createBaseUnit('infantry', 1, owner); else if (rand < pBase[0] + pBase[1]) unit = createBaseUnit('vehicle', 1, owner); else if (rand < pBase[0] + pBase[1] + pBase[2]) unit = createBaseUnit('air', 1, owner); else if (rand < pBase[0] + pBase[1] + pBase[2] + pBase[3]) unit = createBaseUnit('tech', 1, owner); else if (rand < pBase[0] + pBase[1] + pBase[2] + pBase[3] + pBase[4]) unit = createBuilderUnit(owner); else unit = createWordUnit(word, owner); } while (isFirstRecruit && unit.type === 'builder' && builtBuilder); } p.hand[slot] = unit; } state.recruitCount.p2++; }
+}
+
+// ===== 渲染与事件绑定等逻辑维持完全不变 =====
+function drawHut(x, y, w, h, text) { let roofH = h * 0.4; ctx.fillStyle = '#4a3525'; ctx.beginPath(); ctx.moveTo(x, y + roofH); ctx.lineTo(x + w/2, y); ctx.lineTo(x + w, y + roofH); ctx.fill(); ctx.fillStyle = '#b8956e'; ctx.fillRect(x, y + roofH, w, h - roofH); ctx.fillStyle = '#3a2a1e'; ctx.fillRect(x + w/2 - w*0.12, y + h*0.6, w*0.24, h*0.4); ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + w/2, y + h*0.55); }
+function drawButton(x, y, w, h, label, cost, disabled) { ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fillStyle = disabled ? '#666666' : '#d97d54'; ctx.fill(); ctx.strokeStyle = disabled ? '#444444' : '#4a3525'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = disabled ? '#888888' : '#fff'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, x + w/2, y + h*0.35); let cx = x + w/2, cy = y + h*0.75, radius = 10; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2); ctx.fillStyle = disabled ? '#555555' : '#fff'; ctx.fill(); ctx.strokeStyle = disabled ? '#333333' : '#4a3525'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = disabled ? '#666666' : '#000'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(cost, cx, cy); }
+function drawInfoPanel() { const u = state.infoPanelUnit; if (!u) return; if (u.type === 'word' || u.type === 'builder') return; if (state.infoPanelPos) { let pos = state.infoPanelPos; let cx = MAP_OFFSET_X + pos.c * 30 + 15; let cy = pos.r * 30 + 15 + OFFSET_Y; let range = u.range; ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, range, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255, 255, 255, 0.06)'; ctx.fill(); ctx.beginPath(); ctx.arc(cx, cy, range + 2, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth = 6; ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, range, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); } const panelX = 42.5, panelY = 80, panelW = 290, panelH = 180; const iconX = panelX + 12, iconY = panelY + 12, iconSize = 80; const textX = iconX + iconSize + 12; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 15; ctx.fillStyle = '#2d2d2d'; ctx.beginPath(); ctx.roundRect(panelX, panelY, panelW, panelH, 6); ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = '#efe1c9'; ctx.beginPath(); ctx.roundRect(iconX, iconY, iconSize, iconSize, 4); ctx.fill(); ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3; ctx.stroke(); let displayName = u.type === 'hero' ? u.name : (u.type === 'infantry' ? '人' : u.type === 'vehicle' ? '车' : u.type === 'air' ? '空' : '科'); ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 44px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(displayName, iconX + iconSize/2, iconY + iconSize/2); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; let traitStr = ''; if (u.type === 'infantry') traitStr = '(单体)'; else if (u.type === 'vehicle') traitStr = '(范围)'; else if (u.type === 'air') traitStr = '(速射)'; else if (u.type === 'tech') traitStr = '(光环)'; if (u.type === 'hero') { ctx.fillText(u.name + ' Lv.' + u.level, textX, panelY + 30); ctx.textAlign = 'right'; ctx.fillText('满' + u.maxLevel + '级', panelX + panelW - 12, panelY + 30); } else { ctx.fillText(displayName + ' Lv.' + u.level + ' ' + traitStr, textX, panelY + 30); ctx.textAlign = 'right'; ctx.fillText('满级5级', panelX + panelW - 12, panelY + 30); } ctx.beginPath(); ctx.moveTo(textX, panelY + 45); ctx.lineTo(panelX + panelW - 12, panelY + 45); ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; if (u.type === 'tech') { ctx.fillText('作用范围：2.0格', textX, panelY + 75); let buffPct = Math.round(TECH_BUFF[u.level - 1] * 100); ctx.fillText('增益效果：' + buffPct + '%', textX, panelY + 105); } else { ctx.fillText('攻击力：' + u.atk, textX, panelY + 75); ctx.textAlign = 'right'; ctx.fillText('攻速：' + u.atkSpeed.toFixed(2) + '次/秒', panelX + panelW - 12, panelY + 75); ctx.textAlign = 'left'; let rangeText = u.type === 'infantry' ? '射程：2.0格' : u.type === 'vehicle' ? '射程：2.5格' : u.type === 'air' ? '射程：3.5格' : '射程：' + (u.range/30).toFixed(1) + '格'; ctx.fillText(rangeText, textX, panelY + 105); let atkTypeText = '攻击类型：'; if (u.type === 'hero') { if (u.name === '泽塔' || u.name === '泰罗') atkTypeText += '范围'; else atkTypeText += '单体'; ctx.fillStyle = '#ffffff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'left'; ctx.fillText(atkTypeText, textX, panelY + 130); } let currentPos = state.infoPanelPos; if (currentPos) { let rr = currentPos.r, cc = currentPos.c; if (u.type === 'hero' && cc > 0 && state.units[rr][cc-1] === u) cc = cc - 1; let totalAtkBuff = 0, totalSpdBuff = 0, extraText = ''; let techBuff = state.latestBuffSpd[rr][cc] || 0; if (techBuff > 0) { totalSpdBuff += techBuff; extraText += '光'; } let ownerBuffAtk = state.buffs[u.owner + '_atk'] || 0, ownerBuffSpd = state.buffs[u.owner + '_spd'] || 0; if (ownerBuffAtk > 0 || ownerBuffSpd > 0) { totalAtkBuff += ownerBuffAtk; totalSpdBuff += ownerBuffSpd; extraText += '赛'; } if (u._taiga_buff_atk || u._taiga_buff_spd) { totalAtkBuff += (u._taiga_buff_atk || 0); totalSpdBuff += (u._taiga_buff_spd || 0); extraText += '羁'; } if (u.name === '泽塔') { let forms = state.zetaForms || ['原初']; for (let f of forms) { let formData = ZETA_FORM_CONFIG[f]; totalAtkBuff += formData.atk; totalSpdBuff += formData.spd; if (formData.slow > 0) extraText += '伽'; } } let buffText = '状态：'; let parts = []; if (totalAtkBuff > 0) parts.push('攻击 +' + Math.round(totalAtkBuff * 100) + '%'); if (totalSpdBuff > 0) parts.push('攻速 +' + Math.round(totalSpdBuff * 100) + '%'); if (parts.length === 0) { buffText += '无'; ctx.fillStyle = '#888888'; } else { buffText += parts.join('，'); if (extraText.length > 0) buffText += ' (' + extraText + ')'; ctx.fillStyle = '#2ecc71'; } ctx.font = 'bold 14px Arial'; ctx.fillText(buffText, textX, panelY + 150); ctx.fillStyle = '#ffffff'; } } if (u.type === 'hero') { let maxExp = u.expToNext; let curExp = u.exp; let progress = Math.min(curExp / maxExp, 1); let barX = textX, barY = panelY + 165; let rightBound = panelX + panelW - 12; let barW = Math.max(0, rightBound - barX - 6); let barH = 14; ctx.fillStyle = '#333'; ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 7); ctx.fill(); if (u.level >= u.maxLevel) { ctx.fillStyle = '#9b59b6'; ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('MAX', barX + barW/2, barY + barH/2); } else { ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.roundRect(barX, barY, barW * progress, barH, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(Math.floor(curExp) + ' / ' + maxExp, barX + barW/2, barY + barH/2); } } ctx.restore(); }
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) { if (!text) return y; let words = text.split(''); let line = ''; for (let n = 0; n < words.length; n++) { let testLine = line + words[n]; let metrics = ctx.measureText(testLine); let testWidth = metrics.width; if (testWidth > maxWidth && n > 0) { ctx.fillText(line, x, y); line = words[n]; y += lineHeight; } else { line = testLine; } } ctx.fillText(line, x, y); return y + lineHeight; }
+
+function draw() { /* 渲染不变 */
+    ctx.fillStyle = '#2d2d2d'; ctx.fillRect(0, 0, 375, 667);
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++){ let x = MAP_OFFSET_X + c*30, y = r*30+OFFSET_Y; let v; if (r < 7) v = MAP_P2[r][c]; else if (r >= 10) v = MAP_P1[r][c]; else v = 1; let isBase = (r===6&&c===0)||(r===16&&c===0); let isSpawn = (r===0 && c===9) || (r===10 && c===9); if (isSpawn) { ctx.fillStyle = '#0d0d0d'; ctx.fillRect(x, y, 30, 30); ctx.strokeStyle = '#b30000'; ctx.lineWidth = 3; ctx.strokeRect(x, y, 30, 30); ctx.fillStyle = '#ff2222'; ctx.font = '18px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🕳️', x + 15, y + 15); continue; } if(isBase){ ctx.fillStyle='#b33939'; ctx.fillRect(x,y,30,30); ctx.fillStyle='#fff'; ctx.font='bold 11px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('❤️' + (r===6?state.p2.baseHP:state.p1.baseHP), x + 15, y + 15); ctx.strokeStyle='#eee'; ctx.lineWidth=2; ctx.strokeRect(x,y,30,30); continue; } if (v === 0) { ctx.fillStyle='#DDDDDD'; ctx.fillRect(x,y,30,30); ctx.strokeStyle='#7A7A7A'; ctx.lineWidth=1; ctx.strokeRect(x,y,30,30); } else if (v === 1) { ctx.fillStyle='#555'; ctx.fillRect(x,y,30,30); ctx.strokeStyle='#333'; ctx.lineWidth=1; ctx.strokeRect(x,y,30,30); } else if (v === 2) { ctx.fillStyle='#7f8c8d'; ctx.fillRect(x,y,30,30); ctx.strokeStyle='#34495e'; ctx.lineWidth=1; ctx.strokeRect(x,y,30,30); } else if (v === 3) { ctx.fillStyle='#ecf0f1'; ctx.fillRect(x,y,30,30); ctx.strokeStyle='#ffffff'; ctx.lineWidth=2.5; ctx.strokeRect(x,y,30,30); } }
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++){ let u = state.units[r][c]; if (u && u.type === 'tech' && !u.isSleeping) { let x = MAP_OFFSET_X + c*30 + 15; let y = r*30 + 15 + OFFSET_Y; ctx.beginPath(); ctx.arc(x, y, 60, 0, Math.PI * 2); ctx.fillStyle = 'rgba(52, 152, 219, 0.12)'; ctx.fill(); ctx.strokeStyle = 'rgba(52, 152, 219, 0.4)'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); } }
+    for(let glow of state.unlockGlows){ ctx.beginPath(); ctx.arc(glow.x, glow.y, 15, 0, Math.PI*2); ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'; ctx.fill(); ctx.beginPath(); ctx.arc(glow.x, glow.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fill(); } if (state.recycleFlash > 0) { ctx.beginPath(); ctx.arc(187, 350, 40, 0, Math.PI*2); ctx.fillStyle = 'rgba(255, 215, 0, 0.6)'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.fillText('已回收', 187, 355); }
+    for(let e of state.attackEffects) { let alpha = e.timer / e.maxTimer; ctx.globalAlpha = alpha; if (e.type === 'slash') { ctx.beginPath(); ctx.arc(e.x - 10, e.y - 5, 15, 0, Math.PI * 1.5); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.stroke(); } else if (e.type === 'explode') { let radius = 5 + (1 - alpha) * 20; ctx.beginPath(); ctx.arc(e.x, e.y, radius, 0, Math.PI * 2); ctx.fillStyle = '#ff8800'; ctx.fill(); ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 2; ctx.stroke(); } else if (e.type === 'laser') { ctx.beginPath(); ctx.moveTo(e.sx, e.sy); ctx.lineTo(e.ex, e.ey); ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 2; ctx.stroke(); } else if (e.type === 'solar') { let maxRadius = e.range, currentRadius = maxRadius * (1 - alpha); ctx.beginPath(); ctx.arc(e.x, e.y, currentRadius, 0, Math.PI * 2); ctx.strokeStyle = `rgba(255, 215, 0, ${alpha * 0.8})`; ctx.lineWidth = 6; ctx.stroke(); ctx.beginPath(); ctx.arc(e.x, e.y, currentRadius * 0.7, 0, Math.PI * 2); ctx.fillStyle = `rgba(255, 160, 50, ${alpha * 0.5})`; ctx.fill(); } ctx.globalAlpha = 1.0; }
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++){ let u = state.units[r][c]; if(!u) continue; if (u.type === 'hero' && c > 0 && state.units[r][c-1] === u) continue; let x = MAP_OFFSET_X + c*30+15, y = r*30+15+OFFSET_Y; if (buffIndicators[r][c] && u.type !== 'tech' && !u.isSleeping) { ctx.fillStyle = '#3498db'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('↑', x, y - 16); } if (u.type === 'word') { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.stroke(); ctx.fillStyle= '#fff'; ctx.font='bold 14px Arial'; ctx.fillText(u.originalText, x, y-3); continue; } if (u.type === 'hero') { let char1 = u.name[0], char2 = u.name[1]; let cx = MAP_OFFSET_X + c*30, cy = r*30 + OFFSET_Y; let w = 60, h = 30; ctx.shadowColor = u.color; ctx.shadowBlur = 12; ctx.fillStyle = u.color + '30'; ctx.beginPath(); ctx.roundRect(cx, cy, w, h, 4); ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = u.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(cx, cy, w, h, 4); ctx.stroke(); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(char1, cx + 15, cy + 15); ctx.fillText(char2, cx + 45, cy + 15); ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.font = 'bold 9px Arial'; ctx.fillText('Lv'+u.level, cx + 30, cy + 26); continue; } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle = u.isSleeping ? '#7f8c8d' : u.color; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#222'; ctx.lineWidth=1; ctx.stroke(); ctx.fillStyle= '#fff'; ctx.font='bold 14px Arial'; ctx.fillText(u.text, x, y-3); if(u.type !== 'builder') { ctx.fillStyle = u.isSleeping ? '#666' : '#000000'; ctx.font='bold 9px Arial'; ctx.fillText('Lv'+u.level, x, y+12); } }
+    for(let f of state.attackFlash){ ctx.beginPath(); ctx.arc(f.x, f.y, 10, 0, Math.PI*2); ctx.fillStyle='rgba(255, 255, 255, 0.9)'; ctx.fill(); }
+    for(let m of state.monsters) { let x=m.x, y=m.y; if (m._slowPct > 0) { ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.fillStyle = 'rgba(139, 69, 19, 0.35)'; ctx.fill(); ctx.strokeStyle = 'rgba(139, 69, 19, 0.7)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]); } ctx.fillStyle='#e74c3c'; ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.fillText('👾', x, y+2); let hpPct = m.hp / m.maxHp; ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(x-18, y-20, 36, 8); ctx.fillStyle = hpPct > 0.5 ? '#2ecc71' : (hpPct > 0.2 ? '#f1c40f' : '#e74c3c'); ctx.fillRect(x-18, y-20, 36 * hpPct, 8); ctx.fillStyle='#fff'; ctx.font='bold 8px Arial'; ctx.textAlign='center'; ctx.fillText(Math.ceil(m.hp), x, y-13); }
+    const UI_Y = 6; const UI_H = 26; ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.roundRect(10, UI_Y, UI_H, UI_H, 5); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font='bold 14px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(state.paused ? '▶' : '⏸', 10 + UI_H/2, UI_Y + UI_H/2); ctx.fillStyle = '#f1c40f'; ctx.font='bold 14px Arial'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText('⚡' + state.p1.energy, 55, UI_Y + UI_H/2); ctx.fillStyle = '#fff'; ctx.font='bold 15px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('第 ' + state.wave + ' 波', 160, UI_Y + UI_H/2); ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.roundRect(265, UI_Y, UI_H, UI_H, 5); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font='bold 14px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(state.speedMultiplier + 'x', 265 + UI_H/2, UI_Y + UI_H/2); ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.roundRect(300, UI_Y, UI_H, UI_H, 5); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font='bold 18px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('↺', 300 + UI_H/2, UI_Y + UI_H/2);
+    ctx.clearRect(0, MAP_BOTTOM, 375, BOT_UI); ctx.fillStyle='#f4e3d3'; ctx.fillRect(0, MAP_BOTTOM, 375, BOT_UI);
+    drawHut(10, MAP_BOTTOM + 6, 35, 35, '国');
+    let handX = 92, handY = MAP_BOTTOM + 6, handW = 34, handH = 34, gap = 5; for(let i=0; i<5; i++){ let bx = handX + i * (handW + gap); ctx.fillStyle='#f5efe8'; ctx.fillRect(bx, handY, handW, handH); ctx.strokeStyle='#4a3525'; ctx.lineWidth=2; ctx.strokeRect(bx, handY, handW, handH); let u = state.p1.hand[i]; if(u){ let cx = bx + handW/2, cy = handY + handH/2; ctx.fillStyle = (u.type === 'word') ? '#7f8c8d' : u.color; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#222'; ctx.lineWidth=1; ctx.stroke(); ctx.fillStyle='#fff'; ctx.font='bold 10px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; let txt = u.type === 'hero' ? u.name : (u.type === 'word' || u.type === 'builder' ? u.text : u.text + u.level); ctx.fillText(txt, cx, cy); } }
+    let btnX = 147.5, btnY = MAP_BOTTOM + 45, btnW = 80, btnH = 32; let costP1 = 10 + state.recruitCount.p1 * 2; let canAfford = state.p1.energy >= costP1; drawButton(btnX, btnY, btnW, btnH, '征兵', costP1, !canAfford);
+    if (state.pokedexVisible) { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, 375, 667); let winX = 37.5, winY = 40, winW = 300, winH = 500; ctx.fillStyle = '#efe1c9'; ctx.beginPath(); ctx.roundRect(winX, winY, winW, winH, 8); ctx.fill(); ctx.strokeStyle = '#4a3525'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#4a3525'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('可合成英雄', winX + winW/2, winY + 30); let closeX = winX + winW - 40, closeY = winY + 15; ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.roundRect(closeX-12, closeY-12, 24, 24, 4); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✕', closeX, closeY); let selected = state.pokedexSelectedHero; if (!ALL_HEROES.includes(selected)) selected = ALL_HEROES[0]; let config = HERO_SKILL_CONFIG[selected]; let nameBoxX = winX + 60, nameBoxY = winY + 60, nameBoxW = winW - 120, nameBoxH = 50; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(nameBoxX, nameBoxY, nameBoxW, nameBoxH, 4); ctx.fill(); ctx.strokeStyle = '#d97d54'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#4a3525'; ctx.font = 'bold 32px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(selected, nameBoxX + nameBoxW/2, nameBoxY + nameBoxH/2); ctx.fillStyle = '#4a3525'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('技能：', winX + 50, winY + 130); ctx.fillStyle = '#d97d54'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(config ? config.name : '无', winX + 130, winY + 130); let desc = config ? config.desc : '无'; ctx.fillStyle = '#555'; ctx.font = '16px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; wrapText(ctx, desc, winX + 50, winY + 155, winW - 100, 24); let gridStartX = winX + 35; let gridStartY = winY + 210; let slotW = 70, slotH = 40, gGap = 10; for(let i=0; i<ALL_HEROES.length; i++){ let hero = ALL_HEROES[i]; let col = i % 3; let row = Math.floor(i / 3); let gx = gridStartX + col * (slotW + gGap); let gy = gridStartY + row * (slotH + gGap); ctx.fillStyle = (hero === selected) ? '#f5ddb5' : '#fdf5e6'; ctx.beginPath(); ctx.roundRect(gx, gy, slotW, slotH, 4); ctx.fill(); ctx.strokeStyle = '#4a3525'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#4a3525'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(hero, gx + slotW/2, gy + slotH/2); } }
+    if(state.gameOver){ ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,375,667); ctx.fillStyle='#ff0000'; ctx.font='bold 40px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('游戏结束', 187, 280); ctx.fillStyle='#fff'; ctx.font='bold 30px Arial'; ctx.fillText('胜者: '+state.winner, 187, 350); let restartX = 147.5, restartY = 410, restartW = 80, restartH = 40; ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.roundRect(restartX, restartY, restartW, restartH, 8); ctx.fill(); ctx.strokeStyle = '#27ae60'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('重新开始', restartX + restartW/2, restartY + restartH/2); }
+    if (state.drag.isDragging && state.drag.unit) { let u = state.drag.unit; let dx = state.drag.offsetX, dy = state.drag.offsetY; ctx.globalAlpha = 0.7; if (u.type === 'hero') { let cx = dx - 15, cy = dy - 15; ctx.shadowColor = u.color; ctx.shadowBlur = 12; ctx.fillStyle = u.color + '30'; ctx.beginPath(); ctx.roundRect(cx, cy, 60, 30, 4); ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = u.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(cx, cy, 60, 30, 4); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(u.name[0], cx + 15, cy + 15); ctx.fillText(u.name[1], cx + 45, cy + 15); } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle = u.color; ctx.beginPath(); ctx.arc(dx, dy, 12, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#222'; ctx.lineWidth=1; ctx.stroke(); ctx.fillStyle= '#fff'; ctx.font='bold 14px Arial'; ctx.fillText(u.text, dx, dy); } ctx.globalAlpha = 1.0; } drawInfoPanel();
+}
+
+function getOwner(py) { if (py < OFFSET_Y) return null; if (py >= MAP_BOTTOM) return 'p1'; if (py >= OFFSET_Y + 10 * CELL) return 'p1'; return 'p2'; }
+function getPos(px,py){ let r=Math.floor((py-OFFSET_Y)/30), c=Math.floor((px-MAP_OFFSET_X)/30); if(r>=0&&r<ROWS&&c>=0&&c<COLS)return {r,c}; return null; }
+
+canvas.addEventListener('mousedown', e=>{ state.drag.isTouch = false; let r=canvas.getBoundingClientRect(); handleStart((e.clientX-r.left)*(375/r.width), (e.clientY-r.top)*(667/r.height)); });
+canvas.addEventListener('mousemove', e=>{ let r=canvas.getBoundingClientRect(); let px=(e.clientX-r.left)*(375/r.width); let py=(e.clientY-r.top)*(667/r.height); if(state.drag.isDragging) { state.drag.offsetX = px; state.drag.offsetY = py; return; } if(state.drag.isHeroClick) { let dist = Math.hypot(px - state.drag.startX, py - state.drag.startY); if(dist > 5) { let u = state.drag.heroUnit; let r = state.drag.heroRow; let c = state.drag.heroCol; let owner = u.owner; state.heroProgress[u.name] = { level: u.level, exp: u.exp }; if (state[owner].skills[u.name]) delete state[owner].skills[u.name]; let leftCol = c; if (c > 0 && state.units[r][c-1] === u) leftCol = c - 1; let isLeft = (c === leftCol); let char1 = u.name[0], char2 = u.name[1]; let w1 = createWordUnit(char1, owner); let w2 = createWordUnit(char2, owner); w1.isSleeping = u._leftSleep !== undefined ? u._leftSleep : true; w2.isSleeping = u._rightSleep !== undefined ? u._rightSleep : true; state.units[r][leftCol] = null; state.units[r][leftCol+1] = null; if (isLeft) state.units[r][leftCol+1] = w2; else state.units[r][leftCol] = w1; let dragUnit = isLeft ? w1 : w2; let dragRow = r; let dragCol = isLeft ? leftCol : leftCol + 1; state.drag.isDragging = true; state.drag.unit = dragUnit; state.drag.owner = owner; state.drag.fromHandIndex = -1; state.drag.fromRow = dragRow; state.drag.fromCol = dragCol; state.drag.offsetX = px; state.drag.offsetY = py; state.drag.startX = px; state.drag.isHeroClick = false; state.drag.heroUnit = null; state.unlockGlows.push({x: MAP_OFFSET_X + leftCol*30+15, y: r*30+15+OFFSET_Y, timer: 0.3}); } } });
+canvas.addEventListener('mouseup', e=>{ let r=canvas.getBoundingClientRect(); handleEnd((e.clientX-r.left)*(375/r.width), (e.clientY-r.top)*(667/r.height)); });
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); state.drag.isTouch = true; let t=e.touches[0], r=canvas.getBoundingClientRect(); handleStart((t.clientX-r.left)*(375/r.width), (t.clientY-r.top)*(667/r.height)); }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ e.preventDefault(); let r=canvas.getBoundingClientRect(); let t=e.touches[0]; let px=(t.clientX-r.left)*(375/r.width); let py=(t.clientY-r.top)*(667/r.height); if(state.drag.isDragging) { state.drag.offsetX = px; state.drag.offsetY = py; return; } if(state.drag.isHeroClick) { let dist = Math.hypot(px - state.drag.startX, py - state.drag.startY); if(dist > 5) { let u = state.drag.heroUnit; let r = state.drag.heroRow; let c = state.drag.heroCol; let owner = u.owner; state.heroProgress[u.name] = { level: u.level, exp: u.exp }; if (state[owner].skills[u.name]) delete state[owner].skills[u.name]; let leftCol = c; if (c > 0 && state.units[r][c-1] === u) leftCol = c - 1; let isLeft = (c === leftCol); let char1 = u.name[0], char2 = u.name[1]; let w1 = createWordUnit(char1, owner); let w2 = createWordUnit(char2, owner); w1.isSleeping = u._leftSleep !== undefined ? u._leftSleep : true; w2.isSleeping = u._rightSleep !== undefined ? u._rightSleep : true; state.units[r][leftCol] = null; state.units[r][leftCol+1] = null; if (isLeft) state.units[r][leftCol+1] = w2; else state.units[r][leftCol] = w1; let dragUnit = isLeft ? w1 : w2; let dragRow = r; let dragCol = isLeft ? leftCol : leftCol + 1; state.drag.isDragging = true; state.drag.unit = dragUnit; state.drag.owner = owner; state.drag.fromHandIndex = -1; state.drag.fromRow = dragRow; state.drag.fromCol = dragCol; state.drag.offsetX = px; state.drag.offsetY = py; state.drag.startX = px; state.drag.isHeroClick = false; state.drag.heroUnit = null; state.unlockGlows.push({x: MAP_OFFSET_X + leftCol*30+15, y: r*30+15+OFFSET_Y, timer: 0.3}); } } }, {passive:false});
+canvas.addEventListener('touchend', e=>{ e.preventDefault(); if(state.drag.isDragging) { let t=e.changedTouches[0]; let r=canvas.getBoundingClientRect(); handleEnd((t.clientX-r.left)*(375/r.width), (t.clientY-r.top)*(667/r.height)); } }, {passive:false});
+canvas.addEventListener('mouseleave', function() { if (state.drag.isDragging && !state.drag.isTouch) { cancelDrag(); } });
+canvas.addEventListener('click', e=>{ let r=canvas.getBoundingClientRect(); let px=(e.clientX-r.left)*(375/r.width), py=(e.clientY-r.top)*(667/r.height); if (px >= 265 && px <= 291 && py >= 6 && py <= 32) { if (state.speedMultiplier === 1) state.speedMultiplier = 2; else if (state.speedMultiplier === 2) state.speedMultiplier = 3; else state.speedMultiplier = 1; return; } if (px >= 300 && px <= 326 && py >= 6 && py <= 32) { resetGame(); return; } if (px >= 10 && px <= 36 && py >= 6 && py <= 32) { state.paused = !state.paused; return; } if(state.gameOver) { let restartX = 147.5, restartY = 410, restartW = 80, restartH = 40; if (px >= restartX && px <= restartX + restartW && py >= restartY && py <= restartY + restartH) { resetGame(); return; } } if (!state.gameOver && px >= 10 && px <= 45 && py >= MAP_BOTTOM + 6 && py <= MAP_BOTTOM + 41) { state.pokedexVisible = !state.pokedexVisible; return; } if (state.pokedexVisible) { let winX = 37.5, winY = 40, winW = 300, winH = 500; let closeX = winX + winW - 40, closeY = winY + 15; if (px >= closeX-12 && px <= closeX+12 && py >= closeY-12 && py <= closeY+12) { state.pokedexVisible = false; return; } let gridStartX = winX + 35; let gridStartY = winY + 210; let slotW = 70, slotH = 40, gGap = 10; for(let i=0; i<ALL_HEROES.length; i++){ let col = i % 3; let row = Math.floor(i / 3); let gx = gridStartX + col * (slotW + gGap); let gy = gridStartY + row * (slotH + gGap); if (px >= gx && px <= gx + slotW && py >= gy && py <= gy + slotH) { state.pokedexSelectedHero = ALL_HEROES[i]; return; } } } });
+
+function handleStart(px, py){ state.infoPanelUnit = null; state.infoPanelPos = null; if(state.gameOver) return; if (state.drag.isDragging) { if (state.drag.sourceType === 'hand' && state.drag.unit) { let owner = state.drag.owner; let idx = state.drag.sourceIndex; if (state[owner].hand[idx] === null) state[owner].hand[idx] = state.drag.unit; } cancelDrag(); } if (px >= 10 && px <= 45 && py >= MAP_BOTTOM + 6 && py <= MAP_BOTTOM + 41) { return; } if (py >= 6 && py <= 32) { if ((px >= 10 && px <= 36) || (px >= 265 && px <= 291) || (px >= 300 && px <= 326)) { return; } } let owner = getOwner(py); if (owner !== 'p1') return; let p = state[owner]; if (owner === 'p1') { let btnX = 147.5, btnY = MAP_BOTTOM + 45, btnW = 80, btnH = 32; if (px >= btnX && px <= btnX + btnW && py >= btnY && py <= btnY + btnH) { let cost = 10 + state.recruitCount.p1 * 2; if (p.energy >= cost) { p.energy -= cost; state.recruitCount.p1++; let builtBuilder = false; let isGuaranteedBuilder = (state.recruitCount.p1 % 5 === 1); for (let i = 0; i < 5; i++) { let lv = 1; let u; let rand = Math.random(); let word = ALL_WORDS[Math.floor(Math.random() * ALL_WORDS.length)]; if (isGuaranteedBuilder && !builtBuilder) { u = createBuilderUnit(owner); builtBuilder = true; } else { let pInf, pVeh, pAir, pTech, pBuilder, pWord; if (state.wave >= 6) pInf = 0.18, pVeh = 0.18, pAir = 0.18, pTech = 0.15, pBuilder = 0.15, pWord = 0.16; else pInf = 0.20, pVeh = 0.20, pAir = 0.20, pTech = 0.15, pBuilder = 0.15, pWord = 0.10; if (builtBuilder) { let extra = pBuilder / 4; pInf += extra; pVeh += extra; pAir += extra; pTech += extra; pBuilder = 0; } if (rand < pInf) u = createBaseUnit('infantry', lv, owner); else if (rand < pInf + pVeh) u = createBaseUnit('vehicle', lv, owner); else if (rand < pInf + pVeh + pAir) u = createBaseUnit('air', lv, owner); else if (rand < pInf + pVeh + pAir + pTech) u = createBaseUnit('tech', lv, owner); else if (rand < pInf + pVeh + pAir + pTech + pBuilder) u = createBuilderUnit(owner); else u = createWordUnit(word, owner); } p.hand[i] = u; } return; } return; } let handX = 92, handW = 34, gap = 5; if (px >= handX && px <= handX + 4*(handW+gap) + handW && py >= MAP_BOTTOM + 6 && py <= MAP_BOTTOM + 40) { let idx = Math.floor((px - handX) / (handW + gap)); if (idx >= 0 && idx < 5 && p.hand[idx]) { state.drag.isDragging = true; state.drag.unit = p.hand[idx]; state.drag.owner = owner; state.drag.sourceType = 'hand'; state.drag.sourceIndex = idx; state.drag.fromHandIndex = idx; state.drag.offsetX = px; state.drag.offsetY = py; state.drag.startX = px; state.drag.startY = py; return; } } } if (py >= OFFSET_Y && py < MAP_BOTTOM) { let pos = getPos(px, py); if(!pos) return; let {r, c} = pos; let u = state.units[r][c]; if (!u || u.owner !== owner) return; if (u.type === 'hero') { state.drag.isHeroClick = true; state.drag.heroUnit = u; state.drag.heroRow = r; state.drag.heroCol = c; state.drag.startX = px; state.drag.startY = py; return; } if (u) { state.drag.isDragging = true; state.drag.unit = u; state.drag.owner = owner; state.drag.fromHandIndex = -1; state.drag.fromRow = r; state.drag.fromCol = c; state.drag.offsetX = px; state.drag.offsetY = py; state.drag.startX = px; state.drag.startY = py; state.units[r][c] = null; return; } } }
+
+function handleEnd(px, py){
+    if (state.drag.isHeroClick) { let u = state.drag.heroUnit; let r = state.drag.heroRow; let c = state.drag.heroCol; let owner = u.owner; let dist = Math.hypot(px - state.drag.startX, py - state.drag.startY); if (dist < 10) { state.infoPanelUnit = u; state.infoPanelPos = {r, c}; state.drag.isHeroClick = false; state.drag.heroUnit = null; return; } else { state.drag.isHeroClick = false; state.drag.heroUnit = null; } }
+
+    if (!state.drag.isDragging) return; let u = state.drag.unit; let owner = state.drag.owner; let handIdx = state.drag.fromHandIndex; let row = state.drag.fromRow; let col = state.drag.fromCol; let dist = Math.hypot(px - state.drag.startX, py - state.drag.startY);
+
+    if (dist < 10) { if (handIdx !== -1) { state[owner].hand[handIdx] = u; } else if (row >= 0 && col >= 0 && row < ROWS && col < COLS) { state.units[row][col] = u; } state.infoPanelUnit = u; if (row !== -1) state.infoPanelPos = {r: row, c: col}; cancelDrag(); return; }
+
+    let placed = false; let pos = getPos(px, py); let targetHandIdx = -1; let handX = 92, handW = 34, gap = 5, handY = MAP_BOTTOM + 6, handH = 34;
+    if (px >= handX && px <= handX + 4*(handW+gap) + handW && py >= handY && py <= handY + handH) { targetHandIdx = Math.floor((px - handX) / (handW + gap)); if (targetHandIdx < 0 || targetHandIdx >= 5) targetHandIdx = -1; }
+
+    if (targetHandIdx !== -1 && targetHandIdx === handIdx) {
+        if (state[owner].hand[handIdx] === null) state[owner].hand[handIdx] = u;
+        cancelDrag(); return;
+    }
+
+    if (targetHandIdx !== -1) {
+        let pState = state[owner]; let target = pState.hand[targetHandIdx];
+        if (u.type === 'word' && target && target.type === 'word') { let pair = PAIR_LIST.includes(u.originalText + target.originalText) ? u.originalText + target.originalText : (PAIR_LIST.includes(target.originalText + u.originalText) ? target.originalText + u.originalText : null); if (pair) { pState.hand[targetHandIdx] = createHeroUnit(pair, owner); if (handIdx !== -1 && handIdx !== targetHandIdx) pState.hand[handIdx] = null; state.unlockGlows.push({x: 200, y: MAP_BOTTOM + 25, timer: 0.4}); cancelDrag(); return; } }
+        if (target && u.type !== 'word' && target.type !== 'word' && u.type !== 'hero' && target.type !== 'hero') { if (u.type === target.type && u.level === target.level && u.level < 5) { pState.hand[targetHandIdx] = createBaseUnit(u.type, u.level + 1, owner); if (handIdx !== -1 && handIdx !== targetHandIdx) pState.hand[handIdx] = null; state.unlockGlows.push({x: 200, y: MAP_BOTTOM + 25, timer: 0.4}); cancelDrag(); return; } }
+        if (!placed) { if (!target) { pState.hand[targetHandIdx] = u; if (handIdx !== -1) pState.hand[handIdx] = null; placed = true; } else { pState.hand[targetHandIdx] = u; if (handIdx !== -1) pState.hand[handIdx] = target; placed = true; } }
+    }
+
+    if (!placed && pos && pos.r >= 10) {
+        let r = pos.r, c = pos.c; if (u.type === 'builder') { if (MAP_P1[r][c] === 2) { MAP_P1[r][c] = 3; state.unlockGlows.push({x: MAP_OFFSET_X + c*30+15, y: r*30+15+OFFSET_Y, timer: 0.4}); placed = true; } }
+        if (!placed && MAP_P1[r][c] === 3) { let t = state.units[r][c];
+            if (!placed && t && u.type === t.type && u.type !== 'word' && u.type !== 'hero' && u.type !== 'builder' && u.level === t.level && u.level < 5) { let newUnit = createBaseUnit(u.type, u.level + 1, owner); state.units[r][c] = newUnit; if (row >= 0 && col >= 0 && MAP_P1[row][col] === 3) state.units[row][col] = null; state.unlockGlows.push({x: MAP_OFFSET_X + c*30+15, y: r*30+15+OFFSET_Y, timer: 0.35}); placed = true; }
+            if (!placed && u.type === 'word') { let targetOccupant = t; let leftWord = state.units[r][c-1]; let rightWord = state.units[r][c+1];
+                if (leftWord && leftWord.type === 'word' && leftWord.owner === owner) {
+                    let pair = PAIR_LIST.includes(leftWord.originalText + u.originalText) ? leftWord.originalText + u.originalText : (PAIR_LIST.includes(u.originalText + leftWord.originalText) ? u.originalText + leftWord.originalText : null);
+                    if (pair && MAP_P1[r][c-1] === 3 && MAP_P1[r][c] === 3) {
+                        if (targetOccupant && targetOccupant.owner === owner) {
+                            if (handIdx !== -1) state[owner].hand[handIdx] = targetOccupant;
+                            else if (row >= 0 && col >= 0 && MAP_P1[row][col] === 3 && state.units[row][col] === null) state.units[row][col] = targetOccupant;
+                            else tryPlaceUnit(targetOccupant, owner, -1, row, col);
+                        }
+                        state.units[r][c-1] = null; state.units[r][c] = null;
+                        let hero = createHeroUnit(pair, owner);
+                        hero._leftSleep = leftWord.isSleeping; hero._rightSleep = u.isSleeping;
+                        state.units[r][c-1] = hero; state.units[r][c] = hero;
+                        state.unlockGlows.push({x: MAP_OFFSET_X + (c-1)*30+15, y: r*30+15+OFFSET_Y, timer: 0.5});
+                        cancelDrag(); placed = true; return;
+                    }
+                }
+                if (rightWord && rightWord.type === 'word' && rightWord.owner === owner) {
+                    let pair = PAIR_LIST.includes(u.originalText + rightWord.originalText) ? u.originalText + rightWord.originalText : (PAIR_LIST.includes(rightWord.originalText + u.originalText) ? rightWord.originalText + u.originalText : null);
+                    if (pair && MAP_P1[r][c] === 3 && MAP_P1[r][c+1] === 3) {
+                        if (targetOccupant && targetOccupant.owner === owner) {
+                            if (handIdx !== -1) state[owner].hand[handIdx] = targetOccupant;
+                            else if (row >= 0 && col >= 0 && MAP_P1[row][col] === 3 && state.units[row][col] === null) state.units[row][col] = targetOccupant;
+                            else tryPlaceUnit(targetOccupant, owner, -1, row, col);
+                        }
+                        state.units[r][c] = null; state.units[r][c+1] = null;
+                        let hero = createHeroUnit(pair, owner);
+                        hero._leftSleep = u.isSleeping; hero._rightSleep = rightWord.isSleeping;
+                        state.units[r][c] = hero; state.units[r][c+1] = hero;
+                        state.unlockGlows.push({x: MAP_OFFSET_X + c*30+15, y: r*30+15+OFFSET_Y, timer: 0.5});
+                        cancelDrag(); placed = true; return;
+                    }
+                }
+            }
+            if (!placed && t && t.owner === owner) { 
+                if (t.type === 'hero' && u.type !== 'word') {
+                    let leftCol = c; if (c > 0 && state.units[r][c-1] === t) leftCol = c - 1; let isLeft = (c === leftCol); let leftChar = t.name[0], rightChar = t.name[1]; let oldChar = isLeft ? leftChar : rightChar; let otherChar = isLeft ? rightChar : leftChar; let oldWord = createWordUnit(oldChar, owner); let otherWord = createWordUnit(otherChar, owner); oldWord.isSleeping = isLeft ? t._leftSleep : t._rightSleep; otherWord.isSleeping = isLeft ? t._rightSleep : t._leftSleep; state.units[r][leftCol] = null; state.units[r][leftCol+1] = null; state.units[r][c] = u; if (isLeft) state.units[r][c+1] = otherWord; else state.units[r][c-1] = otherWord; if (handIdx !== -1) state[owner].hand[handIdx] = oldWord; else if (row >= 0 && col >= 0 && MAP_P1[row][col] === 3 && state.units[row][col] === null) state.units[row][col] = oldWord; else tryPlaceUnit(oldWord, owner, -1, row, col); placed = true; cancelDrag(); return; }
+                let targetCol = c; if (t.type === 'hero') { let leftCol = c; if (c > 0 && state.units[r][c-1] === t) leftCol = c - 1; state.units[r][leftCol] = null; state.units[r][leftCol+1] = null; } else { state.units[r][c] = null; } state.units[r][targetCol] = u; if (u.type === 'hero') { if (targetCol + 1 < COLS && MAP_P1[r][targetCol + 1] === 3 && state.units[r][targetCol + 1] === null) { state.units[r][targetCol + 1] = u; } else { let leftChar = u.name[0], rightChar = u.name[1]; let w1 = createWordUnit(leftChar, owner); let w2 = createWordUnit(rightChar, owner); state.units[r][targetCol] = w1; tryPlaceUnit(w2, owner, -1, r, targetCol); placed = true; cancelDrag(); return; } } if (handIdx !== -1) { state[owner].hand[handIdx] = t; } else if (row >= 0 && col >= 0 && MAP_P1[row][col] === 3 && state.units[row][col] === null) { state.units[row][col] = t; } else { if (t.type === 'hero') { let leftChar = t.name[0], rightChar = t.name[1]; let w1 = createWordUnit(leftChar, owner); let w2 = createWordUnit(rightChar, owner); tryPlaceUnit(w1, owner, -1, row, col); tryPlaceUnit(w2, owner, -1, row, col); } else { tryPlaceUnit(t, owner, -1, row, col); } } placed = true; } else if (!placed && !t) { state.units[r][c] = u; if (u.type === 'hero') { if (c + 1 < COLS && MAP_P1[r][c + 1] === 3 && state.units[r][c + 1] === null) { state.units[r][c + 1] = u; } else { let leftChar = u.name[0], rightChar = u.name[1]; let w1 = createWordUnit(leftChar, owner); let w2 = createWordUnit(rightChar, owner); state.units[r][c] = w1; tryPlaceUnit(w2, owner, -1, r, c); placed = true; cancelDrag(); return; } } placed = true; }
+        }
+    }
+
+    if (!placed) { if (handIdx !== -1) { if (state[owner].hand[handIdx] === null) state[owner].hand[handIdx] = u; } else if (row >= 0 && col >= 0 && row < ROWS && col < COLS) { state.units[row][col] = u; } } else { if (state.drag.sourceType === 'hand') { let idx = state.drag.sourceIndex; if (state[owner].hand[idx] === state.drag.unit) { state[owner].hand[idx] = null; } } }
+    cancelDrag();
+}
+
+function resetGame() { MAP_P1 = MAP_TEMPLATE.map(row => [...row]); MAP_P2 = MAP_TEMPLATE.map(row => [...row]); state.p1 = { energy: 20, baseHP: 150, hand: [null,null,null,null,null], skills: {} }; state.p2 = { energy: 20, baseHP: 150, hand: [null,null,null,null,null], skills: {} }; state.units = Array.from({ length: ROWS }, () => Array(COLS).fill(null)); state.monsters = []; state.wave = 1; state.waveCountdown = 2; state.monstersSpawned = 0; state.maxMonstersPerWave = 6; state.aiTimer = 0.5; state.nextWaveTimer = 0; state.drag = { isDragging: false, isTouch: false, unit: null, owner: null, sourceType: null, sourceIndex: -1, offsetX: 0, offsetY: 0, fromHandIndex: -1, fromRow: -1, fromCol: -1, startX: 0, startY: 0, isHeroClick: false, heroUnit: null, heroRow: -1, heroCol: -1 }; state.attackEffects = []; state.attackFlash = []; state.unlockGlows = []; state.gameOver = false; state.winner = null; state.recruitCount = { p1: 0, p2: 0 }; state.paused = false; state.speedMultiplier = 1; state.infoPanelUnit = null; state.infoPanelPos = null; state.recycleFlash = 0; state.latestBuffSpd = Array.from({ length: ROWS }, () => Array(COLS).fill(0)); state.heroProgress = {}; state.buffs = { p1_atk: 0, p1_spd: 0, p1_dur: 0, p2_atk: 0, p2_spd: 0, p2_dur: 0 }; state.aiHeroPairGuaranteed = false; state._wave10HeroCheck = false; state._wave11HeroCheck = false; state.pokedexVisible = false; state.pokedexSelectedHero = '迪迦'; state.zetaForms = ['原初']; }
+
+let last=0;
+function loop(t){ try { let rawDt = Math.min((t - last) / 1000, 0.1); let dt = rawDt * state.speedMultiplier; last = t; if(!state.gameOver && !state.paused){ if (state.nextWaveTimer <= 0 && state.monstersSpawned === 0 && state.monsters.length === 0) updateZetaForms(); if (state.wave === 10 && !state._wave10HeroCheck && state.monstersSpawned === 0 && state.monsters.length === 0) { state._wave10HeroCheck = true; let hasHero = false; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.owner === 'p2' && u.type === 'hero') { hasHero = true; break; } } if (hasHero) break; } if (!hasHero) { state.aiHeroPairGuaranteed = true; console.log("[AI机制] 第10波触发：AI场上无英雄，下次AI循环将赠送3铲+双字。"); } } if (state.wave === 11 && !state._wave11HeroCheck && state.monstersSpawned === 0 && state.monsters.length === 0) { state._wave11HeroCheck = true; let hasHero = false; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS; c++) { let u = state.units[r][c]; if (u && u.owner === 'p2' && u.type === 'hero') { hasHero = true; break; } } if (hasHero) break; } if (!hasHero) { let heroCreated = false; for (let r = 0; r < 7; r++) { for (let c = 0; c < COLS - 1; c++) { if (MAP_P2[r][c] === 3 && MAP_P2[r][c+1] === 3 && !state.units[r][c] && !state.units[r][c+1]) { let randomHeroName = PAIR_LIST[Math.floor(Math.random() * PAIR_LIST.length)]; let hero = createHeroUnit(randomHeroName, 'p2', 1); state.units[r][c] = hero; state.units[r][c+1] = hero; state.unlockGlows.push({x: MAP_OFFSET_X + c*30+15, y: r*30+15+OFFSET_Y, timer: 0.5}); console.log(`[AI强制补救] 第11波强行在地图上生成英雄：${randomHeroName}`); heroCreated = true; break; } } if (heroCreated) break; } } } if(state.waveCountdown <= 0 && state.monstersSpawned < state.maxMonstersPerWave && state.nextWaveTimer <= 0){ spawnMonster(PATH_TOP,'p2'); spawnMonster(PATH_BOT,'p1'); state.monstersSpawned++; state.waveCountdown = state.wave > 10 ? 0.8 : 1.5; } else if(state.nextWaveTimer <= 0) state.waveCountdown -= dt; if(state.monstersSpawned >= state.maxMonstersPerWave && state.nextWaveTimer <= 0){ let p1ThreatCleared = !state.monsters.some(m => m.owner === 'p2' && m.hp > 0 && !m.reachedEnd); let p2ThreatCleared = !state.monsters.some(m => m.owner === 'p1' && m.hp > 0 && !m.reachedEnd); if(state.wave > 3 && (p1ThreatCleared || p2ThreatCleared)) state.nextWaveTimer = 0.5; } if(state.nextWaveTimer > 0){ state.nextWaveTimer -= dt; if(state.nextWaveTimer <= 0){ state.wave++; state.monstersSpawned = 0; state.maxMonstersPerWave = 6 + state.wave * 2; state.waveCountdown = 3.0; state.nextWaveTimer = 0; updateZetaForms(); } } if(state.nextWaveTimer <= 0 && state.monstersSpawned >= state.maxMonstersPerWave && state.monsters.length === 0){ state.wave++; state.monstersSpawned = 0; state.maxMonstersPerWave = 6 + state.wave * 2; state.waveCountdown = 3.0; updateZetaForms(); } updateUnits(dt); updateMonsters(dt); updateAI(dt); if(state.p1.baseHP<=0){state.p1.baseHP=0; state.gameOver=true; state.winner='AI (P2)';} if(state.p2.baseHP<=0){state.p2.baseHP=0; state.gameOver=true; state.winner='玩家 (P1)';} } draw(); requestAnimationFrame(loop); } catch (e) { console.error("游戏循环发生错误，已安全兜底:", e); requestAnimationFrame(loop); } }
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

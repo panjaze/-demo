@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>铺路表现对比：现状 / 方案A（素材开垦）/ 方案B（混合叠加去方块）</title>
+<style>
+  body { margin:0; background:#23211c; color:#e8e2d4;
+         font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
+  h1 { font-size:20px; padding:14px 18px 4px; margin:0; }
+  .sub { font-size:13px; padding:0 18px 12px; color:#a89f8c; line-height:1.7; }
+  .sub b { color:#ffd98a; }
+  .row { display:flex; gap:8px; padding:0 18px 6px; }
+  .cell { position:relative; }
+  .cap { font-size:13px; padding:6px 0 4px; }
+  .cap span { color:#8f8672; font-size:12px; }
+  canvas { display:block; background:#3b352b; }
+  .note { font-size:12px; color:#a89f8c; padding:6px 18px 24px; line-height:1.8; }
+  .tag { position:absolute; left:8px; top:8px; font-size:13px; font-weight:700;
+         background:rgba(0,0,0,.62); color:#ffe6a0; padding:3px 9px; border-radius:3px; }
+</style>
+</head>
+<body>
+<h1>铺路表现对比 — 同一条路线，三种画法</h1>
+<div class="sub">
+  路线：<b>官道段</b>（x=3 纵线 y6~y10、y=8 横线 x9~x15 含桥、x=22 纵线 y6~y10）
+  ＋ <b>离官道新路段</b>（主城门口 (3,11)(4,11)、(11,9)(11,10)(11,11)、(21,7)(20,7)）。<br>
+  底图：plate-vivid（当前默认）。第二行是 1:1 原始像素放大，看细节用。
+</div>
+
+<div class="row" id="rowFull"></div>
+<div class="row" id="rowZoom"></div>
+
+<div class="note" id="note"></div>
+
+<script>
+/* ---------------- 数据 ---------------- */
+var BASE = '../../卡牌建城demo/assets/map/plate-vivid.png';
+var RECLAIM = 'road-reclaim.png';
+var STAMP_H = 'road-stamp-h.png';
+var STAMP_V = 'road-stamp-v.png';
+var T = 60, COLS = 29, ROWS = 15;
+var W = COLS * T, H = ROWS * T;   // 1740 x 900
+
+var OFFICIAL = [
+  [0,10],[1,10],[2,9],[2,10],[2,11],[2,12],[2,13],
+  [3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,13],[3,14],
+  [4,6],[4,10],[4,13],
+  [5,6],[5,9],[5,10],[5,12],[5,13],
+  [6,6],[6,10],[6,11],[6,12],[6,13],
+  [7,6],[7,7],[7,8],[7,9],[7,10],[7,11],[7,12],[7,13],
+  [8,5],[8,6],[8,7],[8,8],[8,9],[8,10],[8,13],
+  [9,6],[9,7],[9,8],[10,8],[11,8],[12,8],[13,8],[14,8],[15,8],
+  [15,10],[15,11],
+  [16,8],[16,10],[17,8],[17,9],[17,10],
+  [18,5],[18,6],[18,7],[18,8],[19,6],[19,8],
+  [20,5],[20,6],[20,8],[21,5],
+  [22,3],[22,4],[22,5],[22,6],[22,7],[22,8],[22,9],[22,10],
+  [23,5],
+  [24,3],[24,4],[24,5],[24,6],[24,7],[24,8],[24,9],[24,10],
+  [25,5],[25,10],[26,5],[26,10],[26,11],[27,4],[27,5],[27,6],[27,10],[27,11],
+  [28,4],[28,11]
+];
+var offSet = {};
+OFFICIAL.forEach(function (p) { offSet[p[0] + ',' + p[1]] = 1; });
+
+/* 演示路线：官道段 + 离官道新路段 */
+var PATH = [
+  [3,11],[3,10],[3,9],[3,8],[3,7],[3,6],          // 主城出发（(3,11) 非官道）
+  [4,11],                                          // 非官道
+  [8,8],[9,8],[10,8],[11,8],[12,8],[13,8],[14,8],[15,8],  // 官道横线（含桥 12,8）
+  [11,9],[11,10],[11,11],                          // 非官道支路
+  [22,6],[22,7],[22,8],[22,9],[22,10],             // 官道东纵线
+  [21,7],[20,7]                                    // 非官道支路
+];
+var roadSet = {};
+PATH.forEach(function (p) { roadSet[p[0] + ',' + p[1]] = 1; });
+
+/* 确定性 hash（手绘抖动用，逐帧稳定） */
+function hash2(a, b) {
+  var h = (a * 374761393 + b * 668265263) | 0;
+  h = (h ^ (h >> 13)) * 1274126177 | 0;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+}
+var has = function (gx, gy) { return !!roadSet[gx + ',' + gy]; };
+var isOff = function (gx, gy) { return !!offSet[gx + ',' + gy]; };
+
+/* ---------------- 画法 ---------------- */
+
+/* 现状：照抄 sandbox.js drawRoads() —— 不透明方块 + 描边 + 路心 + 车辙 */
+function drawNow(ctx) {
+  var pad = T * (1 - 0.56) / 2;
+  for (var i = 0; i < PATH.length; i++) {
+    var gx = PATH[i][0], gy = PATH[i][1];
+    var x0 = gx * T, y0 = gy * T;
+    var l = has(gx - 1, gy), r = has(gx + 1, gy), u = has(gx, gy - 1), d = has(gx, gy + 1);
+    var ax0 = l ? x0 : x0 + pad, ax1 = r ? x0 + T : x0 + T - pad;
+    var ay0 = u ? y0 : y0 + pad, ay1 = d ? y0 + T : y0 + T - pad;
+    ctx.fillStyle = '#6b5840';
+    ctx.fillRect(ax0 - 1.5, ay0 - 1.5, ax1 - ax0 + 3, ay1 - ay0 + 3);
+    var j = function (a, b) { return (hash2(a, b) - 0.5) * T * 0.05; };
+    ctx.beginPath();
+    ctx.moveTo(ax0 + j(gx, gy), ay0 + j(gy, gx));
+    ctx.lineTo(ax1 + j(gx + 1, gy), ay0 + j(gy, gx + 1));
+    ctx.lineTo(ax1 + j(gx + 1, gy + 1), ay1 + j(gy + 1, gx + 1));
+    ctx.lineTo(ax0 + j(gx, gy + 1), ay1 + j(gy + 1, gx));
+    ctx.closePath();
+    ctx.fillStyle = '#8a7355'; ctx.fill();
+    var cxm = (ax0 + ax1) / 2, cym = (ay0 + ay1) / 2;
+    var hw = Math.min(ax1 - ax0, ay1 - ay0) * 0.22;
+    ctx.fillStyle = '#9d8466';
+    if (l || r) ctx.fillRect(ax0, cym - hw, ax1 - ax0, hw * 2);
+    if (u || d) ctx.fillRect(cxm - hw, ay0, hw * 2, ay1 - ay0);
+    ctx.strokeStyle = '#6d5941'; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    if (l || r) {
+      ctx.moveTo(ax0, cym - hw * 0.55); ctx.lineTo(ax1, cym - hw * 0.55);
+      ctx.moveTo(ax0, cym + hw * 0.55); ctx.lineTo(ax1, cym + hw * 0.55);
+    }
+    if (u || d) {
+      ctx.moveTo(cxm - hw * 0.55, ay0); ctx.lineTo(cxm - hw * 0.55, ay1);
+      ctx.moveTo(cxm + hw * 0.55, ay0); ctx.lineTo(cxm + hw * 0.55, ay1);
+    }
+    ctx.stroke();
+  }
+}
+
+  /* 方案 A：素材开垦
+   *   官道格 → 把 retex 抠出的「清晰官道」贴回原位（严丝合缝，旧径被开垦出来）
+   *   非官道格 → 贴同一套路面材质 stamp（横/竖随走向），画风与官道一致 */
+  var IMG = null; // 加载后由渲染器注入
+  function drawA(ctx) {
+    for (var i = 0; i < PATH.length; i++) {
+      var gx = PATH[i][0], gy = PATH[i][1];
+      var x0 = gx * T, y0 = gy * T;
+      if (isOff(gx, gy)) {
+        ctx.drawImage(IMG.reclaim, x0, y0, T, T, x0, y0, T, T);
+      } else {
+        var h = has(gx - 1, gy) || has(gx + 1, gy);
+        var v = has(gx, gy - 1) || has(gx, gy + 1);
+        var st = (v && !h) ? IMG.stampV : IMG.stampH;
+        ctx.drawImage(st, x0, y0, T, T);
+      }
+    }
+  }
+
+/* 方案 B：混合叠加去方块化
+ *   ① 不用 fillRect 覆盖，改用 multiply / overlay / soft-light 叠加 → 底图草纹与旧径纹理透出来
+ *   ② 路不再是整格方块，而是沿连接方向的圆头带状路（比现状更窄）→ 消掉格状阵列感
+ *   ③ 官道格额外一层「清草」（lighten 提亮）→ 旧径走向显现
+ *   ④ 确定性噪声碎石/草茬沿路边打点 → 边缘毛糙，不像矩形 */
+function drawB(ctx) {
+  var segs = [];
+  for (var i = 0; i < PATH.length; i++) {
+    var gx = PATH[i][0], gy = PATH[i][1];
+    var cx = (gx + 0.5) * T, cy = (gy + 0.5) * T;
+    if (has(gx + 1, gy)) segs.push([cx, cy, cx + T, cy]);
+    if (has(gx, gy + 1)) segs.push([cx, cy, cx, cy + T]);
+  }
+  function stroke(color, width, alpha, mode) {
+    ctx.globalCompositeOperation = mode;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (var k = 0; k < segs.length; k++) {
+      ctx.moveTo(segs[k][0], segs[k][1]); ctx.lineTo(segs[k][2], segs[k][3]);
+    }
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  stroke('#6b5840', T * 0.60, 0.13, 'multiply');    // ① 路缘压暗：路"陷进地里"
+  stroke('#cdb388', T * 0.44, 0.88, 'color');       // ② 色相改官道土色，明暗纹理全保留
+  stroke('#e0cc9c', T * 0.30, 0.30, 'soft-light');  // ③ 土壤提亮
+  stroke('#d9c493', T * 0.13, 0.22, 'lighten');     // ④ 路心被踩亮的一条
+  /* ⑥ 官道格「清草」：旧径走向显现 */
+  ctx.globalCompositeOperation = 'lighten';
+  ctx.globalAlpha = 0.26; ctx.strokeStyle = '#d8c69a'; ctx.lineWidth = T * 0.30;
+  ctx.beginPath();
+  for (var m = 0; m < PATH.length; m++) {
+    if (!isOff(PATH[m][0], PATH[m][1])) continue;
+    var px = (PATH[m][0] + 0.5) * T, py = (PATH[m][1] + 0.5) * T;
+    if (has(PATH[m][0] + 1, PATH[m][1])) { ctx.moveTo(px, py); ctx.lineTo(px + T, py); }
+    if (has(PATH[m][0], PATH[m][1] + 1)) { ctx.moveTo(px, py); ctx.lineTo(px, py + T); }
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  /* ⑦ 毛边：沿路两侧打确定性碎石/草茬点，破掉干净直边 */
+  ctx.save();
+  for (var n = 0; n < PATH.length; n++) {
+    var gx2 = PATH[n][0], gy2 = PATH[n][1];
+    for (var q = 0; q < 7; q++) {
+      var rx = hash2(gx2 * 31 + q, gy2 * 17);
+      var ry = hash2(gy2 * 47 + q, gx2 * 13);
+      var side = hash2(gx2 + q, gy2 - q);
+      var horiz = has(gx2 - 1, gy2) || has(gx2 + 1, gy2);
+      var px2, py2;
+      if (horiz) { px2 = (gx2 + rx) * T; py2 = (gy2 + 0.5) * T + (side - 0.5) * T * 0.52; }
+      else { px2 = (gx2 + 0.5) * T + (side - 0.5) * T * 0.52; py2 = (gy2 + ry) * T; }
+      ctx.globalAlpha = 0.10 + ry * 0.10;
+      ctx.fillStyle = q % 2 ? '#6b5840' : '#a89268';
+      ctx.beginPath();
+      ctx.ellipse(px2, py2, 1.2 + rx * 2.2, 1.0 + ry * 1.6, rx * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/* 方案 D：A+B 混合（官道格贴回素材开垦 + 离官道格画混合带状路） */
+function drawD(ctx) {
+  var segs = [];
+  for (var i = 0; i < PATH.length; i++) {
+    var gx = PATH[i][0], gy = PATH[i][1];
+    if (isOff(gx, gy)) continue;              // 官道格交给素材贴回
+    var cx = (gx + 0.5) * T, cy = (gy + 0.5) * T;
+    if (has(gx + 1, gy)) segs.push([cx, cy, cx + T, cy]);
+    if (has(gx, gy + 1)) segs.push([cx, cy, cx, cy + T]);
+  }
+  function stroke(color, width, alpha, mode) {
+    ctx.globalCompositeOperation = mode;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (var k = 0; k < segs.length; k++) {
+      ctx.moveTo(segs[k][0], segs[k][1]); ctx.lineTo(segs[k][2], segs[k][3]);
+    }
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  stroke('#6b5840', T * 0.60, 0.13, 'multiply');
+  stroke('#cdb388', T * 0.44, 0.88, 'color');
+  stroke('#e0cc9c', T * 0.30, 0.30, 'soft-light');
+  stroke('#d9c493', T * 0.13, 0.22, 'lighten');
+  ctx.restore();
+  /* 毛边（只打在非官道格上） */
+  ctx.save();
+  for (var n = 0; n < PATH.length; n++) {
+    var gx2 = PATH[n][0], gy2 = PATH[n][1];
+    if (isOff(gx2, gy2)) continue;
+    for (var q = 0; q < 7; q++) {
+      var rx = hash2(gx2 * 31 + q, gy2 * 17);
+      var ry = hash2(gy2 * 47 + q, gx2 * 13);
+      var side = hash2(gx2 + q, gy2 - q);
+      var horiz = has(gx2 - 1, gy2) || has(gx2 + 1, gy2);
+      var px2, py2;
+      if (horiz) { px2 = (gx2 + rx) * T; py2 = (gy2 + 0.5) * T + (side - 0.5) * T * 0.52; }
+      else { px2 = (gx2 + 0.5) * T + (side - 0.5) * T * 0.52; py2 = (gy2 + ry) * T; }
+      ctx.globalAlpha = 0.10 + ry * 0.10;
+      ctx.fillStyle = q % 2 ? '#6b5840' : '#a89268';
+      ctx.beginPath();
+      ctx.ellipse(px2, py2, 1.2 + rx * 2.2, 1.0 + ry * 1.6, rx * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  /* 官道格贴回清晰官道（盖在带状层之上） */
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  for (var m = 0; m < PATH.length; m++) {
+    if (!isOff(PATH[m][0], PATH[m][1])) continue;
+    ctx.drawImage(IMG.reclaim, PATH[m][0] * T, PATH[m][1] * T, T, T,
+                  PATH[m][0] * T, PATH[m][1] * T, T, T);
+  }
+  ctx.restore();
+}
+
+/* ---------------- 渲染 ---------------- */
+var VARIANTS = [
+  { name: '现状 · 不透明方块', fn: drawNow, tip: 'fillRect 覆盖 + 描边，格状阵列' },
+  { name: '方案 A · 素材开垦', fn: drawA, tip: '官道格贴回清晰官道；非官道格贴同材质 stamp' },
+  { name: '方案 B · 混合叠加', fn: drawB, tip: '带状路 + 混合模式，底图纹理透出；官道格清草' },
+  { name: '方案 D · A+B 混合', fn: drawD, tip: '官道格贴回素材 + 非官道格混合带状路（推荐）' }
+];
+var PW = 580, PH = 300;              // 展示尺寸
+var ZX = 180, ZY = 330, ZW = 580, ZH = 300;  // 放大区（1:1 原始像素）
+
+function load(src) {
+  return new Promise(function (res, rej) {
+    var im = new Image(); im.onload = function () { res(im); }; im.onerror = rej; im.src = src;
+  });
+}
+
+Promise.all([load(BASE), load(RECLAIM), load(STAMP_H), load(STAMP_V)]).then(function (imgs) {
+  IMG = { base: imgs[0], reclaim: imgs[1], stampH: imgs[2], stampV: imgs[3] };
+
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+
+  VARIANTS.forEach(function (v) {
+    octx.clearRect(0, 0, W, H);
+    octx.globalCompositeOperation = 'source-over';
+    octx.globalAlpha = 1;
+    octx.drawImage(IMG.base, 0, 0);
+    v.fn(octx, IMG);
+
+    ['full', 'zoom'].forEach(function (kind) {
+      var host = document.getElementById(kind === 'full' ? 'rowFull' : 'rowZoom');
+      var box = document.createElement('div'); box.className = 'cell';
+      var cap = document.createElement('div'); cap.className = 'cap';
+      cap.innerHTML = v.name + ' <span>' + (kind === 'full' ? '全图' : '1:1 放大') + '</span>';
+      var cv = document.createElement('canvas');
+      cv.width = PW; cv.height = PH;
+      var c = cv.getContext('2d');
+      if (kind === 'full') c.drawImage(off, 0, 0, W, H, 0, 0, PW, PH);
+      else c.drawImage(off, ZX, ZY, ZW, ZH, 0, 0, PW, PH);
+      var tag = document.createElement('div'); tag.className = 'tag'; tag.textContent = v.name.split(' · ')[0];
+      box.appendChild(cap); box.appendChild(cv); box.appendChild(tag);
+      host.appendChild(box);
+    });
+  });
+
+  document.getElementById('note').innerHTML =
+    '<b>怎么读</b>：第一行看整体是否还像"方格阵列"；第二行看路面与底图草纹/旧径是否融合。<br>' +
+    '<b>方案 A</b> 官道格严丝合缝（把长草旧径开垦回清晰官道），非官道格复用同一套路面材质；局限：非官道格上的 stamp 是从官道裁下来的，地形不同时接缝需再调。<br>' +
+    '<b>方案 B</b> 不动素材，把"不透明覆盖"改成"混合叠加 + 圆头带状路"，底图纹理透出来；官道格多加一层清草提亮让旧径显现。<br>' +
+    '<b>方案 D（推荐）</b> 官道格 = A 的素材贴回（开垦感最强、与底图官道严丝合缝），非官道格 = B 的混合带状路（同色系、有纹理），两者在交界处自然衔接。<br>' +
+    '<b>共同点</b>：玩家铺的路与底图官道材质/画风一致，不再有方块。';
+}).catch(function (e) { document.getElementById('note').textContent = '加载失败: ' + e; });
+</script>
+</body>
+</html>
