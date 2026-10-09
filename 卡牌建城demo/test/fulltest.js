@@ -171,6 +171,29 @@ const drag = async (fromBox, toXY) => {
     await forceClose();
   });
 
+  await step('S4d 点击每一种资源点都必须给提示且不抛异常', async () => {
+    /* 第四十四次修订：物流点的 res='logistics' 一直没登记进 ui.js 的 RES_META，
+     * 于是点它会执行 RES_META['logistics'].icon → TypeError → **点击处理器被杀死** →
+     * 玩家看到的是"点了没反应"。真人模拟测试随机点地图时抓到。
+     * 这里把地图上每一种资源类型都点一遍，确定性锁死（旧测试从没点过物流点）。 */
+    const n0 = errors.length;
+    const pts = await page.evaluate(() => CFG.map.resources.map(r => ({ gx: r.gx, gy: r.gy, res: r.res })));
+    const kinds = [];
+    const done = {};
+    for (const p of pts) {
+      if (done[p.res]) continue;
+      done[p.res] = 1; kinds.push(p.res);
+      const t = await tileXY(p.gx, p.gy);
+      await page.mouse.click(t.x, t.y);
+      await page.waitForTimeout(200);
+      const h = await hint();
+      if (!h || /undefined/.test(h)) { log('S4d', false, p.res + ' → hint=' + h); return; }
+      await page.keyboard.press('Escape');
+    }
+    log('S4d', errors.length === n0, '点了 ' + kinds.length + ' 种资源点（' + kinds.join('/') +
+        '），新增错误=' + (errors.length - n0));
+  });
+
   /* ===== S5 合成（先升主城到 Lv2 让建筑可到 Lv2）===== */
   await step('S5 同类卡拖到已有建筑 → Lv2（需主城 Lv2 解锁上限）', async () => {
     await page.evaluate(() => { Game.state.castleLevel = 2; Game.state.hand[1] = { key: 'farm' }; UI.render(); });

@@ -9,9 +9,18 @@
 const $ = function (id) { return document.getElementById(id); };
 
 const RES_META = {
-  energy:   { icon: '⚡', name: '能量' },
-  food:     { icon: '🌾', name: '粮食' },
+  energy:    { icon: '⚡',  name: '能量' },
+  food:      { icon: '🌾', name: '粮食' },
+  /* ★ 物流点（第四十四次修订补）：
+   *   `CFG.map.resources` 里有 4 个 `res: 'logistics'` 的物流点（第二十八次修订把矿点改过来的），
+   *   但这里一直没登记 → 任何 `RES_META[r.res].icon` 都抛 TypeError。
+   *   破坏力在于：它发生在**点击处理器里**，异常会杀死处理器 → 玩家点击物流点"点了没反应"
+   *   （正是踩坑 #1 描述的形态）。由真人模拟测试随机点地图抓到。 */
+  logistics: { icon: '🛣️', name: '物流' },
 };
+
+/** 资源类型的安全取图标：万一将来又加了新资源种类，也不会再把点击处理器炸掉 */
+function resIcon(res) { return (RES_META[res] && RES_META[res].icon) || '📍'; }
 
 function resText(cost) {
   return Object.keys(cost).map(function (k) {
@@ -412,8 +421,10 @@ const UI = {
       const owner = Game.resourceOwnerOf(r);
       const g2 = S.resGuard[Game.tileKeyOf(gx, gy)] || 0;
       UI.hint(owner === 'p1'
-        ? '「' + r.name + '」已归我方，每 Tick +' + r.yield + ' ' + RES_META[r.res].icon
-        : '「' + r.name + '」剩余守军 ' + g2 + '：派 ≥' + (g2 + 1) + ' 兵清掉守军即可占领（每 Tick +' + r.yield + ' ' + RES_META[r.res].icon + '）');
+        ? '「' + r.name + '」已归我方，' + (r.yield > 0 ? '每 Tick +' + r.yield + ' ' + resIcon(r.res)
+                                                     : '每 24 秒自动免费铺 1 格路')
+        : '「' + r.name + '」剩余守军 ' + g2 + '：派 ≥' + (g2 + 1) + ' 兵清掉守军即可占领（' +
+          (r.yield > 0 ? '每 Tick +' + r.yield + ' ' + resIcon(r.res) : '占领后自动铺路') + '）');
     } else if (Game.isTargetTile(gx, gy)) {
       UI.hint('这是「' + Game.tileName(gx, gy) + '」· 先点我方有兵的格子选中部队，再点这里派兵');
     } else {

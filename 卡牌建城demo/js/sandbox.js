@@ -687,7 +687,10 @@ const Sandbox = {
     CFG.map.resources.forEach((r) => {
       const owner = (G && G.state) ? G.resourceOwnerOf(r) : null;
       const ring = owner === 'p1' ? COL.p1 : (owner === 'p2' ? COL.p2 : null);
-      icon(r.gx, r.gy, r.res === 'material' ? '⛏️' : (r.res === 'food' ? '🌾' : '⚡'), 0.46, ring);
+      /* 资源点图标：粮点 🌾 / 能源点 ⚡ / 物流点 🛣️（第四十四次修订：
+       * 这里原本判的是 'material'——那是已删除的物资体系遗留，导致物流点被画成 ⚡） */
+      const ico = r.res === 'food' ? '🌾' : (r.res === 'logistics' ? '🛣️' : '⚡');
+      icon(r.gx, r.gy, ico, 0.46, ring);
     });
   },
 
