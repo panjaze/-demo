@@ -62,6 +62,7 @@ const UI = {
   init() {
     this.modal = null;               // 'shop' | 'pool' | null
     this.discardMode = false;
+    this._resultShown = false;       // 结算演出只触发一次（第四十三次修订）
     this.tileSel = null;             // 选中的己方建筑格 { gx, gy, isCastle }
     this.roadPlacing = null;         // 铺路模式 { key, handIdx, left, card }
     this.bindTopbar();
@@ -1347,10 +1348,20 @@ const UI = {
       if (dz2) dz2.innerHTML = '<span>🗑️</span>弃牌 ' + S.discardCount;
     }
 
-    /* ---- 胜负结算 ---- */
+    /* ---- 胜负结算（第四十三次修订：加演出）
+     * 先让沙盘把「主城爆炸」演完，再拉幕出结算卡；卡片本身分 5 段登场（见 CSS 的 wb-result-*）。 */
     const ro = $('result-overlay');
     if (S.result) {
-      ro.classList.remove('hidden');
+      if (!UI._resultShown) {
+        UI._resultShown = true;
+        const delay = (CFG.ui && CFG.ui.resultDelay) || 0;
+        const reveal = function () {
+          if (!Game.state || !Game.state.result) return;   // 期间已重开
+          ro.classList.remove('hidden');
+          ro.classList.add('result-in');
+        };
+        if (delay > 0) setTimeout(reveal, delay); else reveal();
+      }
       const win = S.result === 'win';
       const draw = S.result === 'draw';
       $('result-icon').textContent = draw ? '⏱' : (win ? '🏆' : '💀');
@@ -1366,7 +1377,9 @@ const UI = {
       }
       $('result-sub').innerHTML = sub;
     } else {
+      UI._resultShown = false;
       ro.classList.add('hidden');
+      ro.classList.remove('result-in');
     }
 
     /* ---- 开牌区 ---- */

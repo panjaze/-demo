@@ -42,6 +42,8 @@ const Sandbox = {
   scale: 1, offX: 0, offY: 0,
   camX: 0, camY: 0,        // 相机（地图左上角相对视口的偏移）
   moves: [],               // 移动轨迹动画 { x0,y0,x1,y1,side,t0 }
+  fx: [],                  // 表现层特效（消费 Game.fx 而来）：pop 落成 / burst 战斗 / flash 占领 / blast 攻城
+  _fxAudioT: 0,            // 战斗音效节流（同帧多场战斗只响一次）
   dropPreview: null,       // 拖卡时的落点预览 { handIdx, key, gx?, gy? }（gx/gy = 光标下的锚点格）
   hoverTile: null,         // 光标下的格子（建造模式的跟随预览用，pointermove 维护）
   plateImg: null,          // 当前底图 Image（mapVisual 底板层）
@@ -338,6 +340,7 @@ const Sandbox = {
     ctx.fillRect(0, 0, this.cw, this.ch);
 
     // 用 try/finally 兜底：任何一处绘制异常都不会把画布变换留在脏状态
+    this.drainFx();          // 先消费逻辑层的特效事件（drawBuildings 要用 pop 变形）
     ctx.save();
     try {
       ctx.translate(this.offX, this.offY);
@@ -356,6 +359,7 @@ const Sandbox = {
       this.drawTroops(ctx, T);
       this.drawMarching(ctx, T);
       this.drawMoves(ctx, T);
+      this.drawFx(ctx, T);   // 特效在最上层（爆炸/飘字/光环）
     } catch (e) {
       if (!this._errShown) { this._errShown = true; console.error('[Sandbox] 绘制异常：', e); }
     } finally {
@@ -736,9 +740,22 @@ const Sandbox = {
         /* ⑤ 建筑本体（横向略溢出，竖直向上长出格） */
         if (sp) {
           const tall = (key === 'tower' || key === 'castle');
-          const w = Math.round(fw * 1.02);
-          const h = Math.round(tall ? fh * 0.50 + T * 1.05 : fh * 0.60 + T * 0.52);
-          ctx.drawImage(sp, cx - w / 2, y0 + fh - T * 0.06 - h, w, h);
+          let w = Math.round(fw * 1.02);
+          let h = Math.round(tall ? fh * 0.50 + T * 1.05 : fh * 0.60 + T * 0.52);
+          let px = cx - w / 2, py = y0 + fh - T * 0.06 - h, ga = 1;
+          /* 落成 / 升级：底边锚定的纵向弹跳（第四十三次修订）。
+           * 旧版建筑是"凭空出现"，这是"demo 感"的主要来源之一。 */
+          const pop = this.popOf(gx, gy, performance.now());
+          if (pop) {
+            h = Math.max(1, Math.round(h * pop.ky));
+            w = Math.max(1, Math.round(w * pop.kx));
+            px = cx - w / 2;
+            py = y0 + fh - T * 0.06 - h;    // 底边不动 → 读起来像从地面长出来
+            ga = pop.alpha;
+          }
+          if (ga < 1) { ctx.save(); ctx.globalAlpha = ga; }
+          ctx.drawImage(sp, px, py, w, h);
+          if (ga < 1) ctx.restore();
         } else {
           /* 贴图未就绪（无头 / assets 关闭）→ 退回"名称 + 等级"文字，信息不丢 */
           const icy = y0 + fh * 0.42;
@@ -951,6 +968,176 @@ const Sandbox = {
 
   addMove(x0, y0, x1, y1, side, n) {
     this.moves.push({ x0: x0, y0: y0, x1: x1, y1: y1, side: side, n: n, t0: performance.now() });
+  },
+
+  /* ==================== 表现层特效（第四十三次修订） ====================
+   * 逻辑层（Game）只往 Game.fx 里放"刚刚发生了什么"，这里消费并画出来，
+   * 顺便触发引擎的震屏/顿帧与音效 —— 分层仍然是干净的：Game 不碰渲染。
+   * 时长（ms）：pop 480 / burst 620 / flash 560 / blast 1200。 */
+  FX_MS: { pop: 620, burst: 620, flash: 560, blast: 1200 },
+
+  /** 把 Game.fx 里的事件搬到本层的特效列表（带 t0 时间戳） */
+  drainFx() {
+    const G = global.Game;
+    if (!G || !G.fx || !G.fx.length) return 0;
+    const now = performance.now();
+    const n = G.fx.length;
+    for (let i = 0; i < n; i++) {
+      const e = G.fx[i];
+      const dur = this.FX_MS[e.kind] || 500;
+      this.fx.push(Object.assign({ t0: now, dur: dur }, e));
+      if (e.kind === 'burst' || e.kind === 'blast') this._punch(e);
+      else if (e.kind === 'pop' && global.Engine && Engine.shake) Engine.shake(1.6, 0.10);
+    }
+    G.fx.length = 0;
+    if (this.fx.length > 120) this.fx.splice(0, this.fx.length - 120);
+    return n;
+  },
+
+  /** 冲击反馈：震屏 + 顿帧 + 音效（带节流，避免同帧十场战斗把画面抖散） */
+  _punch(e) {
+    const E = global.Engine;
+    if (!E) return;
+    const now = performance.now();
+    const heavy = !!e.castle || e.kind === 'blast';
+    if (!heavy && now - this._fxAudioT < 110) return;
+    this._fxAudioT = now;
+    if (e.kind === 'blast') {
+      if (E.shake) E.shake(16, 0.85);
+      if (E.hitStop) E.hitStop(0.10);
+      if (E.audio && E.audio.win) (e.result === 'lose' ? (E.audio.lose || E.audio.win) : E.audio.win).call(E.audio);
+    } else if (heavy) {
+      if (E.shake) E.shake(9, 0.42);
+      if (E.hitStop) E.hitStop(0.07);
+      if (E.audio && E.audio.hurt) E.audio.hurt();
+    } else {
+      if (E.shake) E.shake(3.2, 0.14);
+      if (E.audio && E.audio.hit) E.audio.hit();
+    }
+  },
+
+  /** 某格建筑当前的"落成变形"（供 drawBuildings 用）；没有则返回 null */
+  popOf(gx, gy, now) {
+    for (let i = this.fx.length - 1; i >= 0; i--) {
+      const f = this.fx[i];
+      if (f.kind !== 'pop' || f.gx !== gx || f.gy !== gy) continue;
+      const p = (now - f.t0) / f.dur;
+      if (p < 0 || p >= 1) return null;
+      /* 先"从地里弹出来"再回弹。
+       * ⚠️ 长起阶段用 easeIn（慢起）而不是 easeOut —— easeOut 会在 ~30ms 内就冲到满高，
+       * "被压扁"那一瞬根本看不见（第一版就是这么写的，放大截图才发现）。 */
+      let ky, kx;
+      if (p < 0.45) {
+        const q = p / 0.45, e2 = q * q;                  // easeInQuad：压扁状态停留得久
+        ky = 0.08 + (1.18 - 0.08) * e2;
+      } else {
+        const q = (p - 0.45) / 0.55, e2 = 1 - Math.pow(1 - q, 3);
+        ky = 1.18 + (1 - 1.18) * e2;                     // easeOutCubic：回弹到 1
+      }
+      kx = 1 + (1 - ky) * 0.34;
+      return { ky: ky, kx: kx, alpha: Math.min(1, p / 0.10), p: p };
+    }
+    return null;
+  },
+
+  /** 特效绘制：统一在建筑/部队之上、坐标牌之下 */
+  drawFx(ctx, T) {
+    const now = performance.now();
+    this.fx = this.fx.filter(function (f) { return now - f.t0 < f.dur; });
+    const G = global.Game;
+    if (!G || !G.state) return;
+
+    for (let i = 0; i < this.fx.length; i++) {
+      const f = this.fx[i];
+      const p = (now - f.t0) / f.dur;
+      const e = 1 - Math.pow(1 - p, 2);                       // easeOutQuad
+      const cx = (f.gx + 0.5) * T, cy = (f.gy + 0.5) * T;
+      const P1 = '#4a9eff', P2 = '#ff6b6b';
+
+      if (f.kind === 'pop') {
+        /* 落成：扬尘环 + 一圈金光（建筑本体的变形由 drawBuildings 负责） */
+        const b = G.buildingAt ? G.buildingAt(f.gx, f.gy) : null;
+        const fp = b ? G.footOf(b.type) : { w: 1, h: 1 };
+        const rx = fp.w * T * 0.52, ry = fp.h * T * 0.26;
+        ctx.save();
+        ctx.globalAlpha = (1 - p) * 0.75;
+        ctx.strokeStyle = f.levelUp ? '#ffd23f' : '#e8dcc0';
+        ctx.lineWidth = 3 * (1 - p) + 1;
+        ctx.beginPath();
+        ctx.ellipse(cx, (f.gy + fp.h) * T - T * 0.06, rx * (0.5 + e * 0.9), ry * (0.5 + e * 0.9), 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = (1 - p) * 0.35;
+        ctx.strokeStyle = '#fff8e0';
+        ctx.beginPath();
+        ctx.ellipse(cx, (f.gy + fp.h) * T - T * 0.06, rx * (0.3 + e * 0.55), ry * (0.3 + e * 0.55), 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (f.kind === 'burst' || f.kind === 'flash' || f.kind === 'blast') {
+        const big = f.kind === 'blast';
+        const isFlash = f.kind === 'flash';
+        /* 圈色：占领=金；战斗=被全歼那一方的颜色；爆炸=橙红 */
+        let col = '#ffd23f';
+        if (big) col = '#ff9b3d';
+        else if (!isFlash) {
+          const dead = (f.win === 'p1') ? 'p2' : (f.win === 'p2' ? 'p1' : null);
+          col = dead === 'p1' ? P1 : (dead === 'p2' ? P2 : '#e8dcc0');
+        }
+        const rings = big ? 3 : (isFlash ? 2 : 2);
+        ctx.save();
+        for (let r = 0; r < rings; r++) {
+          const pp = Math.max(0, p - r * 0.16) / (1 - r * 0.16);
+          if (pp <= 0) continue;
+          const ee = 1 - Math.pow(1 - pp, 2);
+          ctx.globalAlpha = Math.max(0, (1 - pp) * (big ? 0.9 : 0.8));
+          ctx.strokeStyle = r % 2 ? '#fff' : col;
+          ctx.lineWidth = (big ? 6 : 4) * (1 - pp) + 1;
+          ctx.beginPath();
+          const R0 = big ? T * 0.5 : T * 0.22;
+          const R1 = big ? T * 2.6 : (isFlash ? T * 1.15 : T * 0.95);
+          ctx.arc(cx, cy, R0 + (R1 - R0) * ee, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        /* 中心闪光 */
+        if (big || !isFlash) {
+          ctx.globalAlpha = Math.max(0, (1 - p * 1.6)) * (big ? 0.85 : 0.5);
+          ctx.fillStyle = big ? '#fff3d0' : col;
+          ctx.beginPath();
+          ctx.arc(cx, cy, (big ? T * 0.9 : T * 0.35) * (1 - p * 0.7), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        /* 飘字 */
+        const label = big ? (f.result === 'lose' ? '主城陷落' : '主城摧毁')
+                          : (isFlash ? (f.resource ? '占领' : '夺得') : '-' + f.loss);
+        if (label) {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, 1 - p * 1.1);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '800 ' + Math.round(T * (big ? 0.46 : 0.32)) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+          const ty = cy - T * (big ? 0.6 + e * 1.5 : (isFlash ? 0.5 + e * 0.9 : 0.66 + e * 1.05));
+          /* 深色底衬：飘字经常压在资源点标签/建筑名上，没有底衬就看不出来 */
+          if (!big) {
+            const tw = ctx.measureText(label).width, pad = T * 0.11;
+            ctx.globalAlpha = Math.max(0, 1 - p * 1.1) * 0.72;
+            ctx.fillStyle = 'rgba(10,8,4,0.9)';
+            ctx.fillRect(cx - tw / 2 - pad, ty - T * 0.21, tw + pad * 2, T * 0.42);
+            ctx.globalAlpha = Math.max(0, 1 - p * 1.1);
+          }
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = 'rgba(10,8,4,0.85)';
+          ctx.fillStyle = big ? '#ffd9a0' : col;
+          ctx.strokeText(label, cx, ty);
+          ctx.fillText(label, cx, ty);
+          ctx.restore();
+        }
+        continue;
+      }
+    }
   },
 
   /** 移动轨迹：流动虚线 + 目的地脉冲，约 0.6s 淡出 */

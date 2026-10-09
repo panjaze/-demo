@@ -426,6 +426,9 @@ const drag = async (fromBox, toXY) => {
   });
   await step('S13b 结算卡 → 重新开始', async () => {
     await forceClose();   // 清掉胜利瞬间可能叠加的政策/奖励弹窗，让结算卡可点
+    /* 第四十三次修订：结算卡现在有出场延迟（先让沙盘演"主城爆炸"），所以要等它真的出现 */
+    await page.locator('#result-overlay:not(.hidden)').waitFor({ state: 'visible', timeout: 4000 }).catch(() => {});
+    await page.waitForTimeout(250);
     const vis = await page.locator('#result-card').isVisible().catch(() => false);
     if (!vis) { log('S13b', false, '结算卡未出现'); return; }
     const cover = await page.evaluate(() => {
@@ -440,6 +443,24 @@ const drag = async (fromBox, toXY) => {
     await page.waitForTimeout(400);
     const s = await state();
     log('S13b', s.over === false && s.buildings === 0, JSON.stringify(s));
+  });
+  await step('S13d 对局结束后结算卡必须自动出现（不依赖任何点击）', async () => {
+    /* 第四十三次修订抓到并修掉的 bug：对局一结束 tickCount 就停住，
+     * 主循环只剩轻量 refresh()，而结算卡只在全量 render() 里触发 →
+     * 破城后画面毫无反应。旧版 S13b 之所以没发现，是因为测试的 ff() 末尾
+     * 显式调了一次 UI.render()，把 bug 掩盖了。这一步故意**不调 render()**。 */
+    await page.evaluate(() => {
+      const S = Game.state, ec = S.enemyCastle;
+      ec.hp = 1;
+      Game.setTroops(ec.gx, ec.gy, 'p1', 12);
+      Game.engageTile(ec.gx, ec.gy, 'p1');
+    });
+    const okVis = await page.locator('#result-overlay:not(.hidden)')
+      .waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
+    const over = await page.evaluate(() => Game.state.over === true);
+    log('S13d', okVis && over, 'over=' + over + ' 结算卡=' + (okVis ? '出现' : '未出现'));
+    await page.evaluate(() => { UI._resultShown = false; document.getElementById('result-restart').click(); });
+    await page.waitForTimeout(400);
   });
 
   /* ===== S14 相机 / 暂停 / 调试 / 压力 ===== */

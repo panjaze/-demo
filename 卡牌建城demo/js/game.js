@@ -38,6 +38,20 @@ const Game = {
 
   state: null,
 
+  /* ==================== 表现层事件队列（第四十三次修订） ====================
+   * 「刚刚发生了什么」的纯表现层事件，交给渲染层消费（沙盘画特效、引擎震屏/顿帧）。
+   * ⚠️ 故意**不放进 state**：
+   *   ① 它是渲染的附属品，不该参与存档、也不该影响任何逻辑断言（selftest 直接用它测不到）；
+   *   ② 无头环境里没人消费，所以**必须限长**，否则长跑（simulate 几千局）会无限增长。
+   * game.js 仍然保持"纯逻辑、不碰 DOM/渲染"：这里只是往数组里放数据。 */
+  fx: [],
+  FX_MAX: 64,
+  pushFx(o) {
+    if (this.fx.length >= this.FX_MAX) this.fx.shift();
+    this.fx.push(o);
+    return o;
+  },
+
   /* ==================== 初始化 ==================== */
 
   reset() {
@@ -756,6 +770,7 @@ const Game = {
     S.hand[handIdx] = null;
     S.stats.built++;
     this.syncCastleHp();
+    this.pushFx({ kind: 'pop', gx: gx, gy: gy, side: 'p1' });   // 落成动画（第四十三次修订）
     this.log('建成 Lv1 ' + def(type).name + '　(' + gx + ',' + gy + ')');
     return true;
   },
@@ -1177,6 +1192,7 @@ const Game = {
     b.level++;
     b.pending = true;
     this.state.stats.upgraded++;
+    this.pushFx({ kind: 'pop', gx: b.gx, gy: b.gy, side: 'p1', levelUp: true });
     this.log('升级牌：' + def(b.type).name + ' → Lv' + b.level);
     return { ok: true };
   },
@@ -1199,6 +1215,7 @@ const Game = {
     b.level++;
     b.pending = true;
     this.state.stats.merged++;
+    this.pushFx({ kind: 'pop', gx: b.gx, gy: b.gy, side: 'p1', levelUp: true, merge: true });
     this.log('合成：' + def(b.type).name + ' → Lv' + b.level + '（免一张升级牌）');
     return true;
   },
@@ -1583,12 +1600,14 @@ const Game = {
         this.log('开疆旗：占领得 +⚡' + vanguard);
       }
       this.log('占领「' + r.name + '」→ 每 Tick +' + r.yield + ' ' + RES_ICON[r.res]);
+      this.pushFx({ kind: 'flash', gx: gx, gy: gy, side: 'p1', capture: true, resource: true });
       return 'p1';
     }
     if (t.p2 > 0 && t.p1 === 0 && S.resourceOwner[key] !== 'p2') {
       S.resourceOwner[key] = 'p2';
       S.resGuard[key] = CFG.hp.resourceGuard;   // 敌方占领后守军恢复满值（防反复易手）
       this.log('敌方占领「' + r.name + '」');
+      this.pushFx({ kind: 'flash', gx: gx, gy: gy, side: 'p2', capture: true, resource: true });
       return 'p2';
     }
     return null;
@@ -1612,6 +1631,13 @@ const Game = {
     const loss = Math.min(t.p1, t.p2);
     this.state.stats.killed = (this.state.stats.killed || 0) + loss;
     this.state.stats.lost = (this.state.stats.lost || 0) + loss;
+    /* 表现层：让「数量抵消」看得见（第四十三次修订）。
+     * 旧版这里只是把兵数改掉，画面上两队兵"啪"地一起消失，玩家感知不到战斗过程。 */
+    this.pushFx({
+      kind: 'burst', gx: gx, gy: gy, loss: loss,
+      win: d > 0 ? 'p1' : (d < 0 ? 'p2' : null),
+      left: Math.abs(d), p1: t.p1, p2: t.p2,
+    });
     if (d > 0) {
       this.setTroops(gx, gy, 'p1', d);
       this.setTroops(gx, gy, 'p2', 0);
@@ -1712,6 +1738,8 @@ const Game = {
     if (side === 'p1' && ec && this.inCastleFoot(gx, gy, ec)) {
       ec.hp -= n;
       this.setTroops(gx, gy, side, 0);
+      this.pushFx({ kind: 'burst', gx: gx, gy: gy, loss: n, win: 'p1',
+                    left: Math.max(0, ec.hp), castle: true, target: 'p2' });
       this.log('进攻敌方主城：-' + n + '，敌方主城剩 ' + Math.max(0, ec.hp));
       if (ec.hp <= 0) this.finish('win');
       return;
@@ -1721,6 +1749,8 @@ const Game = {
     if (side === 'p2' && this.inCastleFoot(gx, gy, S.castle)) {
       S.castleHp -= n;
       this.setTroops(gx, gy, side, 0);
+      this.pushFx({ kind: 'burst', gx: gx, gy: gy, loss: n, win: 'p2',
+                    left: Math.max(0, S.castleHp), castle: true, target: 'p1' });
       this.log('我方主城受击：-' + n + '，剩 ' + Math.max(0, S.castleHp));
       if (S.castleHp <= 0) this.finish('lose');
     }
@@ -1749,6 +1779,7 @@ const Game = {
     b.hp = this.buildingMaxHp(b.level);
     b.pending = true;                 // 本 Tick 不产出，下 Tick 起为新主人产出
     this.syncCastleHp();
+    this.pushFx({ kind: 'flash', gx: b.gx, gy: b.gy, side: side, capture: true });
     this.log((side === 'p1' ? '我方占领' : '敌方占领') + ' ' + name + ' → Lv' + b.level);
     return 'captured';
   },
@@ -1761,6 +1792,9 @@ const Game = {
     S.paused = true;
     S.castleHp = Math.max(0, S.castleHp);
     S.enemyCastle.hp = Math.max(0, S.enemyCastle.hp);
+    /* 表现层：被摧毁的那座主城来一次大爆炸（结算演出的开场） */
+    const ruined = result === 'win' ? S.enemyCastle : (result === 'lose' ? S.castle : null);
+    if (ruined) this.pushFx({ kind: 'blast', gx: ruined.gx, gy: ruined.gy, result: result });
     this.log(result === 'win' ? '🏆 敌方主城被摧毁 —— 胜利！'
            : result === 'lose' ? '💀 我方主城被摧毁 —— 战败'
            : '⏱ 时间到 —— 按综合分判定' + (S.score ? '（' + S.score.total + ' 分）' : ''));
@@ -1848,6 +1882,7 @@ const Game = {
         hp: CFG.hp.building[0], pending: true, trainT: 0,
       };
       this.reindex();
+      this.pushFx({ kind: 'pop', gx: best.gx, gy: best.gy, side: 'p2' });   // AI 落成也给反馈
       this.log('敌方建成 Lv1 ' + d.name + '　(' + best.gx + ',' + best.gy + ')');
       return true;
     }
