@@ -145,6 +145,32 @@ const drag = async (fromBox, toXY) => {
     log('S4b', s.buildings === 1, 'hint=' + (await hint()).slice(0, 40));
   });
 
+  await step('S4c 商店：买不起「道路牌/效果牌」时必须给提示且不抛异常', async () => {
+    /* 第四十四次修订：真人模拟测试（_humanplay.js）随机点商店卡时抓到
+     * `Cannot read properties of undefined (reading 'name')` ——
+     * 旧代码在"买不起"分支写死 CFG.buildings[type].name，
+     * 而商店里还有**道路牌 / 效果牌**，它们的 key 不在 CFG.buildings 里 → 抛异常 →
+     * 点击处理器被杀死 → 玩家看到"点了没反应"。这一步确定性锁死它。 */
+    await page.evaluate(() => {
+      const S = Game.state;
+      S.res.energy = 0;                                      // 一分钱没有
+      S.hand = [null, null, null, null, null];               // 手牌清空 → 才会走到"能量不足"分支
+      S.shop = { cards: ['dirt', 'stone', 'avenue', 'harvest', 'rally'] };  // 3 张道路 + 2 张效果
+      UI.setModal('shop'); UI.render();
+    });
+    await page.waitForTimeout(220);
+    const n0 = errors.length;
+    for (let i = 0; i < 5; i++) {
+      await page.locator('#shop-cards [data-shop="' + i + '"]').click({ timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(120);
+    }
+    const h = await hint();
+    const n1 = errors.length;
+    log('S4c', n1 === n0 && /能量不足/.test(h) && !/undefined/.test(h),
+        '新增错误=' + (n1 - n0) + ' hint=' + h.slice(0, 60));
+    await forceClose();
+  });
+
   /* ===== S5 合成（先升主城到 Lv2 让建筑可到 Lv2）===== */
   await step('S5 同类卡拖到已有建筑 → Lv2（需主城 Lv2 解锁上限）', async () => {
     await page.evaluate(() => { Game.state.castleLevel = 2; Game.state.hand[1] = { key: 'farm' }; UI.render(); });

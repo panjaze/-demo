@@ -534,11 +534,24 @@ head('13 一局能量收支（含主城升级）');
 Game.reset(); rich();
 place('power', CASTLE().gx + 1, CASTLE().gy, 3);
 place('power', CASTLE().gx - 1, CASTLE().gy, 3);
-let income = S().res.energy;
-for (let i = 0; i < 90; i++) income += Game.applyTick().energy;
+/* ⚠️ 这里必须把能量归位：rich() 会把能量设成 99999，
+ *   照着 rich 后的余额算"一局收入"会得到十万级的天文数字，
+ *   断言就永远成立 —— 等于没测（这正是"阈值定太低 = 自己骗自己"的变体）。
+ *   改成"跑满 90 个 Tick 的净增量"，才是真实的一局能量收入。 */
+S().res.energy = CFG.resource.initial.energy;
+const eBase = S().res.energy;
+for (let i = 0; i < 90; i++) Game.applyTick();
+const income = S().res.energy - eBase;
 const castleCost = CFG.castle.levels.slice(0, 4).reduce(function (s, l) { return s + (l.upCost ? l.upCost.energy : 0); }, 0);
-ok('主城升满共需 515 能量', castleCost === 515, castleCost);
-console.log('     一局能量收入（含初始，2 座 Lv3 能源站）≈ ' + income);
+/* ★ 第四十四次修订：这里改成断言**设计不变量**，而不是把某个具体数字写死。
+ *   意义：升满主城的总成本必须能被"一局能量收入"覆盖 —— 否则 Lv4/Lv5、
+ *   黄金政策池、士兵上限 120~140 这些内容就是"做完了但活不到"（本轮修的就是这个）。
+ *   旧版写死 515，于是数值一调测试就红，却守不住真正要守的东西。 */
+ok('主城升满的总成本 < 一局能量收入（保证 Lv4/Lv5 是可达内容）',
+   castleCost > 0 && castleCost < income,
+   { 升满成本: castleCost, 一局收入: Math.round(income), 占收入比: (castleCost / income).toFixed(2) });
+console.log('     一局能量净收入（90 Tick，2 座 Lv3 能源站 + 主城 Lv1 自带）≈ ' + income +
+            '　·　升满主城 ' + castleCost + '，占收入 ' + (castleCost / income * 100).toFixed(0) + '%');
 console.log('     一局能量支出：主城升级 ' + castleCost + ' + 开牌买卡 ≈ 90 = ' + (castleCost + 90));
 console.log('     收支比 ≈ ' + (income / (castleCost + 90)).toFixed(2) + ' 倍');
 
@@ -1448,12 +1461,12 @@ Game.reset();
 ok('任务链共 3 星、每星 5 个小任务',
    CFG.quests.stars.length === 3 && CFG.quests.stars.every(function (s) { return s.length === 5; }),
    CFG.quests.stars.length);
-// 每星必含一个弃牌任务，且难度阶梯明显（12 / 30 / 60）
+// 每星必含一个弃牌任务，且难度必须严格递增（具体数值可调，用 diag-events 的分布重校）
 const discNeed = CFG.quests.stars.map(function (s) {
   return s.filter(function (q) { return q.stat === 'discards'; })[0].need;
 });
-ok('每星都有弃牌任务且阶梯递增（40 / 80 / 130）',
-   discNeed.length === 3 && discNeed[0] === 40 && discNeed[1] === 80 && discNeed[2] === 130,
+ok('每星都有弃牌任务且阶梯严格递增',
+   discNeed.length === 3 && discNeed[0] > 0 && discNeed[0] < discNeed[1] && discNeed[1] < discNeed[2],
    discNeed);
 
 // 弃牌累计进任务（一星弃牌 40 张）

@@ -37,6 +37,10 @@ const acc = {
   // 任务
   q1: [], q2: [], q3: [], qDone: [],
   bottleneck: {},                       // 三星各项达标时刻（找卡脖子的任务）
+  /** 终局时每个任务项的最终值（第四十四次修订新增）——
+   *  上面的 bottleneck 只在三星真正达成时才记录，所以门槛定得太高时它永远打不出东西。
+   *  这里无条件下记录终局值，用来判断"门槛该定在分布的第几分位"。 */
+  qEnd: {},
   // 结算
   win: 0, lose: 0, draw: 0,
   E_win: [], E_lose: [], scoreWin: [], scoreLose: [],
@@ -71,6 +75,25 @@ for (let g = 0; g < ROUNDS; g++) {
     }
 
     Game.update(1);
+
+    /* ★ 第四十四次修订：脚本玩家也要会升主城。
+     * 旧脚本从不升本 → 终局主城等级 P50 恒为 1 → 所有「主城升到 LvN」的任务项必然失败，
+     * 星级诊断结果被严重低估（真实玩家会升本，真人模拟里主城能到 Lv5）。
+     * 现实策略：留一点余量（够开牌+买卡）就升本。 */
+    if (S().res.energy >= 6 && !S().over) {
+      const cu = Game.castleUpgradeCost();
+      if (cu && cu.energy && S().res.energy >= cu.energy + 6) {
+        Game.upgradeCastle();
+        if (S().policy.p1.offer && MODE !== 'nopolicy') {   // 升本会触发政策三选一，顺手领掉
+          const off2 = S().policy.p1.offer;
+          let pk = 0;
+          for (let i = 0; i < off2.length; i++) {
+            if (CFG.policy.list[off2[i].key].school === S().policy.p1.school) { pk = i; break; }
+          }
+          Game.chooseOffer(pk); polPicks++;
+        }
+      }
+    }
 
     // 买卡（真人式：开牌、挑建筑卡、没好卡刷新）
     if (!S().shop && S().res.energy >= 8 && S().hand.indexOf(null) >= 0) Game.openShop();
@@ -288,6 +311,14 @@ for (let g = 0; g < ROUNDS; g++) {
 
   acc.q1.push(q1 || 0); acc.q2.push(q2 || 0); acc.q3.push(q3 || 0);
   acc.qDone.push(S().questStar);
+  /* 终局每项的最终值（带星级前缀，便于对照门槛） */
+  CFG.quests.stars.forEach(function (star, si) {
+    star.forEach(function (qs) {
+      const key = '★' + (si + 1) + ' ' + qs.name + '（需 ' + qs.need + '）';
+      if (!acc.qEnd[key]) acc.qEnd[key] = [];
+      acc.qEnd[key].push(Game.questValue(qs.stat));
+    });
+  });
 
   if (S().result === 'win') {
     acc.win++;
@@ -332,6 +363,18 @@ console.log('三星各项达标时刻 P50（找卡脖子项）：');
 Object.keys(acc.bottleneck).forEach(function (k) {
   const arr = acc.bottleneck[k].filter(function (x) { return x !== undefined; });
   console.log('  ' + k + ' → P50 ' + P(arr, 0.5) + 's（未达标 ' + (ROUNDS - arr.length) + ' 局）');
+});
+
+console.log('\n-- ★ 终局每项任务的最终值分布（重校门槛用）--');
+console.log('   项目                                     P10    P25    P50    P75    P90   ← 达标率');
+Object.keys(acc.qEnd).forEach(function (k) {
+  const a = acc.qEnd[k];
+  const need = parseInt((k.match(/需 (\d+)/) || [0, 0])[1], 10);
+  const rate = Math.round(a.filter(function (v) { return v >= need; }).length / a.length * 100);
+  console.log('   ' + k.padEnd(36) +
+    String(P(a, 0.1)).padStart(6) + String(P(a, 0.25)).padStart(7) +
+    String(P(a, 0.5)).padStart(7) + String(P(a, 0.75)).padStart(7) +
+    String(P(a, 0.9)).padStart(7) + ('   ' + rate + '%').padStart(9));
 });
 
 console.log('\n-- 结算与 E 项 --');

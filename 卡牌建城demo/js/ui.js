@@ -635,7 +635,16 @@ const UI = {
         const type = S.shop && S.shop.cards[i];
         if (!type) return;
         if (S.hand.indexOf(null) < 0) UI.hint('手牌已满，先弃牌或把牌打进城市区');
-        else UI.hint('能量不足，买不起这张 ' + CFG.buildings[type].name + '（需 ' + CFG.buildings[type].price + ' ⚡）');
+        else {
+          /* ⚠️ 必须用 cardInfo，不能写死 CFG.buildings[type]：
+           * 商店里除了建筑牌还有**道路牌 / 效果牌**，它们的 key 不在 CFG.buildings 里。
+           * 旧版在"买不起一张道路/效果牌"时直接 `undefined.name` 抛异常，
+           * 而异常会**杀掉当前点击处理器**——玩家的感受就是"点了没反应"（踩坑 #1 的典型形态）。
+           * 第四十四次修订：由真人模拟测试（test/_humanplay.js 随机点商店卡）抓到。 */
+          const info = Game.cardInfo(type);
+          UI.hint('能量不足，买不起「' + ((info && info.name) || type) + '」（需 ' +
+                  ((info && info.price) || 0) + ' ⚡）');
+        }
         Engine.audio.hurt();
       }
     });

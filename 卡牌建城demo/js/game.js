@@ -1080,7 +1080,8 @@ const Game = {
     E.refreshes = 0;
     if (side === 'p1') {
       const d = CFG.events.list[E.current];
-      this.log('事件「' + d.name + '」生效：' + d.desc + (old ? '（顶掉「' + CFG.events.list[old].name + '」）' : ''));
+      this.log('事件「' + d.name + '」生效：' + d.desc +
+               (old ? '（顶掉「' + ((CFG.events.list[old] || {}).name || old) + '」）' : ''));
     }
     return true;
   },

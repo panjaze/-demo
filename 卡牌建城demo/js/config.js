@@ -197,11 +197,16 @@ var CFG = {
     gateBuildings: 2,    // 城门缺口：主城四邻最多允许 2 座建筑（保证主城永远可达，方案 C）
     // energy = 主城每 Tick 自带的能量产出（保证基础能量收入，避免"建不出能源站就死锁"）
     // perTypeCap = 该等级下「每种建筑」的数量上限（由主城等级决定城市规模）
+    /* ★ 第四十四次修订：升级成本整体下调约 42%（原 35/80/150/250 = 合计 515⚡）。
+     * 依据：实测一局（P50 对局 1097 秒）**全部能量收入只有 ~660⚡**，
+     *       而道路要吃掉 ~160、卡牌 ~90 —— 515 的升本线在数学上不可能达成，
+     *       于是 Lv4/Lv5、黄金政策池、士兵上限 120~140 全成了"做完了但活不到"的内容。
+     *       目标：让"玩得像样"的玩家在对局后半段摸到 Lv4，长局能到 Lv5。 */
     levels: [
-      { upCost: { energy: 35 },  hp: 60,  energy: 2, perTypeCap: 3 },  // Lv1 开局自带
-      { upCost: { energy: 80 },  hp: 84,  energy: 3, perTypeCap: 4 },  // Lv2 → 解锁防御塔/石路牌 + 建筑可升 Lv2
-      { upCost: { energy: 150 }, hp: 108, energy: 4, perTypeCap: 5 },  // Lv3 → 解锁大道牌 + 建筑可升 Lv3
-      { upCost: { energy: 250 }, hp: 134, energy: 5, perTypeCap: 6 },  // Lv4
+      { upCost: { energy: 20 },  hp: 60,  energy: 2, perTypeCap: 3 },  // Lv1 开局自带
+      { upCost: { energy: 40 },  hp: 84,  energy: 3, perTypeCap: 4 },  // Lv2 → 解锁防御塔/石路牌 + 建筑可升 Lv2
+      { upCost: { energy: 70 },  hp: 108, energy: 4, perTypeCap: 5 },  // Lv3 → 解锁大道牌 + 建筑可升 Lv3
+      { upCost: { energy: 110 }, hp: 134, energy: 5, perTypeCap: 6 },  // Lv4
       { upCost: null,            hp: 168, energy: 6, perTypeCap: 7 },  // Lv5 封顶
     ],
   },
@@ -437,27 +442,33 @@ var CFG = {
    */
   quests: {
     scorePerStar: 10,
+    /* ★ 第四十四次修订：门槛按**实测分布**重校。
+     * 旧门槛把每一项都压在实测 P50 附近（例如「训练 60」而实测 P50=59、"弃牌 40" 而 P50=38），
+     * 而每星要求 5 项**全部**达成 —— 5 项独立事件同时越过中位数的概率极低，
+     * 实测结果是 **30/30 局 0 星**，遗物链完全断掉（遗物是任务唯一产出）。
+     * 新的取法定在：一星 ≈ P10~P25（玩得像样就能过）、二星 ≈ P50、三星 ≈ P75~P90（需要搏一把）。
+     * 依据：`node test/diag-events.js 30 2400 all` 输出的「终局每项任务的最终值分布」。 */
     stars: [
-      [   // ⭐ 一星（目标 ~7 分钟完成；弃牌速率实测约 5.5 张/分钟）
+      [   // ⭐ 一星（早期就该拿到，给玩家第一次"我变强了"的反馈）
         { stat: 'built',       need: 4,   name: '建成 4 座建筑' },
         { stat: 'castleLevel', need: 2,  name: '主城升到 Lv2' },
         { stat: 'discards',    need: 40, name: '累计弃牌 40 张' },
         { stat: 'resources',   need: 1,  name: '控制 1 个资源点' },
-        { stat: 'trained',     need: 60, name: '累计训练 60 个士兵' },
+        { stat: 'trained',     need: 40,  name: '累计训练 40 个士兵' },
       ],
-      [   // ⭐⭐ 二星（目标 ~15 分钟完成）
+      [   // ⭐⭐ 二星（中局目标）
         { stat: 'built',       need: 9,   name: '建成 9 座建筑' },
         { stat: 'castleLevel', need: 3,  name: '主城升到 Lv3' },
-        { stat: 'discards',    need: 80, name: '累计弃牌 80 张' },
-        { stat: 'captures',    need: 4,  name: '累计占领 4 次资源点' },
-        { stat: 'killed',      need: 40, name: '消灭 40 个敌兵' },
+        { stat: 'discards',    need: 60, name: '累计弃牌 60 张' },
+        { stat: 'captures',    need: 3,  name: '累计占领 3 次资源点' },
+        { stat: 'killed',      need: 20, name: '消灭 20 个敌兵' },
       ],
-      [   // ⭐⭐⭐ 三星（目标 ~24 分钟完成，校准到弃牌 P50 速率）
+      [   // ⭐⭐⭐ 三星（长局挑战，压到 P75~P90）
         { stat: 'built',       need: 14,  name: '建成 14 座建筑' },
         { stat: 'castleLevel', need: 4,   name: '主城升到 Lv4' },
-        { stat: 'discards',    need: 130, name: '累计弃牌 130 张' },
-        { stat: 'captures',    need: 8,   name: '累计占领 8 次资源点' },
-        { stat: 'killed',      need: 90,  name: '消灭 90 个敌兵' },
+        { stat: 'discards',    need: 100, name: '累计弃牌 100 张' },
+        { stat: 'captures',    need: 4,   name: '累计占领 4 次资源点' },
+        { stat: 'killed',      need: 60,  name: '消灭 60 个敌兵' },
       ],
     ],
   },
