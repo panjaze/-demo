@@ -25,6 +25,7 @@ function makeCtx() {
     strokeText: noop,
     setLineDash: noop, measureText: function () { return { width: 10 }; },
     createLinearGradient: function () { return { addColorStop: noop }; },
+    createRadialGradient: function () { return { addColorStop: noop }; },   // ★ 资源点呼吸光用到
     fillStyle: '', strokeStyle: '', lineWidth: 1, lineDashOffset: 0,
     font: '', textAlign: '', textBaseline: '', globalAlpha: 1,
   };

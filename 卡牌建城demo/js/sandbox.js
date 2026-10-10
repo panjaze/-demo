@@ -98,6 +98,17 @@ const Sandbox = {
       img.onerror = () => { /* 加载失败 → 该建筑永久降级为 emoji，不重试 */ };
       img.src = CFG.assets.dir + CFG.assets.files[k];
     });
+    /* ★ 第七十一次修订：资源点据点素材（透明底 PNG，缺失时降级 emoji） */
+    this.resSprites = {};
+    const RC = CFG.resourceCamps;
+    if (RC && RC.enabled && typeof global.Image === 'function') {
+      Object.keys(RC.files).forEach((k) => {
+        const img = new global.Image();
+        img.onload = () => { this.resSprites[k] = img; };
+        img.onerror = () => { /* 缺失 → 资源点降级为 emoji 图标 */ };
+        img.src = RC.dir + RC.files[k];
+      });
+    }
     /* 地图底板（环境层）：按 CFG.mapVisual.activePlate 加载，缺失时回退程序化草地 */
     this.loadPlate(CFG.mapVisual && CFG.mapVisual.activePlate);
     /* 官道开垦层：铺在官道格上 = 把长草旧径开垦成清晰官道（加载失败只影响观感，不影响玩法） */
@@ -684,13 +695,55 @@ const Sandbox = {
     };
 
     const G = global.Game;
+    const RC = CFG.resourceCamps;
+    const CW = (RC && RC.width) || 1.5;
+    const FLAG = { p1: '#2f6fb8', p2: '#c0392b' };
     CFG.map.resources.forEach((r) => {
       const owner = (G && G.state) ? G.resourceOwnerOf(r) : null;
-      const ring = owner === 'p1' ? COL.p1 : (owner === 'p2' ? COL.p2 : null);
-      /* 资源点图标：粮点 🌾 / 能源点 ⚡ / 物流点 🛣️（第四十五次修订：
-       * 这里原本判的是 'material'——那是已删除的物资体系遗留，导致物流点被画成 ⚡） */
-      const ico = r.res === 'food' ? '🌾' : (r.res === 'logistics' ? '🛣️' : '⚡');
-      icon(r.gx, r.gy, ico, 0.46, ring);
+      const cx = (r.gx + 0.5) * T, cy = (r.gy + 0.5) * T;
+
+      /* ① 接地阴影（据点比原来的 emoji 大，阴影同步放大） */
+      ctx.save();
+      ctx.fillStyle = 'rgba(30,24,14,0.30)';
+      ctx.beginPath(); ctx.ellipse(cx + 2, cy + T * 0.32, T * 0.46, T * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+      /* ② 未占领：淡金色呼吸光 —— 唤起"这里是个目标"的注意（方案A） */
+      if (!owner) {
+        /* performance 在无头冒烟环境的假 global 里可能不存在 */
+        const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const ph = (nowMs / 1000) % 2.8 / 2.8;
+        const a = 0.09 + 0.12 * (1 - Math.abs(ph * 2 - 1));
+        const gr = ctx.createRadialGradient(cx, cy - T * 0.08, T * 0.12, cx, cy - T * 0.08, T * 0.92);
+        gr.addColorStop(0, 'rgba(255,224,138,' + a.toFixed(3) + ')');
+        gr.addColorStop(1, 'rgba(255,224,138,0)');
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.arc(cx, cy - T * 0.08, T * 0.92, 0, Math.PI * 2); ctx.fill();
+      }
+
+      /* ③ 据点实体（素材缺失 → 降级回 emoji 图标） */
+      const sp = this.resSprites && this.resSprites[r.res];
+      if (sp) {
+        const w = T * CW, h = w * (sp.height / sp.width);
+        ctx.drawImage(sp, cx - w / 2, cy + T * 0.32 - h, w, h);
+      } else {
+        const ico = r.res === 'food' ? '🌾' : (r.res === 'logistics' ? '🛣️' : '⚡');
+        ctx.font = Math.round(T * 0.5) + 'px serif';
+        ctx.fillText(ico, cx, cy);
+      }
+
+      /* ④ 占领旗（率土式插旗）：中立不插旗 —— 旗只在有归属后出现 */
+      if (owner && FLAG[owner]) {
+        const px = cx + T * 0.46, top = cy - T * 0.66, base = cy + T * 0.30;
+        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = Math.max(2, T * 0.05);
+        ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, top); ctx.stroke();
+        const fw = T * 0.36, fh = T * 0.21;
+        ctx.fillStyle = FLAG[owner];
+        ctx.beginPath(); ctx.moveTo(px, top);
+        ctx.lineTo(px + fw, top + fh * 0.5); ctx.lineTo(px, top + fh);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+      }
     });
   },
 
@@ -1282,14 +1335,26 @@ const Sandbox = {
       const owner = G.resourceOwnerOf(r);
       // 未占领的资源点显示剩余守军——否则玩家不知道派兵过去为什么没效果
       const guard = G.state.resGuard[r.gx + ',' + r.gy] || 0;
-      const guardTxt = !owner && guard > 0 ? ' 守军' + guard : (owner ? '' : ' 可占领');
-      const txt = (owner ? (owner === 'p1' ? '★ ' : '✖ ') : '') + r.name + guardTxt;
-      const x = (r.gx + 0.5) * T, y = (r.gy + 1.04) * T;
-      const w = Math.max(46, ctx.measureText(txt).width + 12);
-      ctx.fillStyle = 'rgba(6,10,16,0.74)';
-      ctx.fillRect(x - w / 2, y - T * 0.13, w, T * 0.28);
+      /* ★ 第七十一次修订（方案A）：底牌升级为「收益牌」—— 名称 / 产出 / 守军 三件事一眼看全。
+       *   新玩家不知道"占了有什么好处"正是资源点无吸引力的原因之一。 */
+      const yieldTxt = r.res === 'logistics' ? '自动铺路'
+        : ('+' + r.yield + (r.res === 'food' ? ' 粮/Tick' : ' ⚡/Tick'));
+      const l1 = (owner ? (owner === 'p1' ? '★ ' : '✖ ') : '') + r.name;
+      const l2 = yieldTxt + (!owner && guard > 0 ? ' · 守军' + guard : '');
+      const x = (r.gx + 0.5) * T, y = (r.gy + 1.02) * T;
+      ctx.font = '700 ' + Math.round(T * 0.20) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      const w = Math.max(64, ctx.measureText(l1).width, ctx.measureText(l2).width) + 14;
+      const h = T * 0.52;
+      ctx.fillStyle = 'rgba(6,10,16,0.78)';
+      ctx.fillRect(x - w / 2, y - T * 0.16, w, h);
+      ctx.strokeStyle = owner === 'p1' ? 'rgba(255,210,63,.55)' : (owner === 'p2' ? 'rgba(255,138,138,.5)' : 'rgba(255,255,255,.28)');
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - w / 2 + 0.5, y - T * 0.16 + 0.5, w - 1, h - 1);
       ctx.fillStyle = owner === 'p1' ? '#ffd23f' : (owner === 'p2' ? '#ff8a8a' : '#f2f6ff');
-      ctx.fillText(txt, x, y);
+      ctx.fillText(l1, x, y);
+      ctx.font = Math.round(T * 0.18) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = '#dfe8f4';
+      ctx.fillText(l2, x, y + T * 0.21);
     });
     ctx.restore();
   },

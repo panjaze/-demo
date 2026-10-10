@@ -172,7 +172,7 @@ function boot() {
     if (global.UI && UI.setModal) UI.setModal(null);
     /* 截图 / 回归：塞一手示范牌（覆盖建筑 / 道路 / 效果三种卡面） */
     Game.state.hand = [{ key: 'farm' }, { key: 'barracks' }, { key: 'dirt' }, { key: 'harvest' }, null];
-    /* ★ ?tut=1..6：直接进入新手引导第 N 步（无头截图 / 回归测试用，见 tutorial.js）。
+    /* ★ ?tut=1..7：直接进入新手引导第 N 步（无头截图 / 回归测试用，见 tutorial.js）。
      * ⚠️ 测试入口不弹「选择界面」—— 它的全屏遮罩会挡住 handplace 等模拟点击
      *   （实测 11 项挂 1 项）；真实玩家的入口是主菜单「开始游戏」→ menu.js start()。 */
     const tm = global.location.href.match(/[?&#]tut=(\d)/);

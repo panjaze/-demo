@@ -63,8 +63,8 @@ var CFG = {
       { gx: 5,  gy: 5, res: 'food',     yield: 50, name: '粮点·西北' },
       { gx: 23, gy: 9, res: 'food',     yield: 50, name: '粮点·东南' },
 
-      { gx: 9,  gy: 9, res: 'food',     yield: 50, name: '粮点·内' },
-      { gx: 19, gy: 5, res: 'food',     yield: 50, name: '粮点·内' },
+      { gx: 9,  gy: 9, res: 'food',     yield: 50, name: '粮点·中南' },
+      { gx: 19, gy: 5, res: 'food',     yield: 50, name: '粮点·中北' },
     ],
     logisticsRoadSec: 60,   // 物流点：每个占领的物流点每 60 秒自动免费铺 1 格路（§4.3）
 
@@ -593,6 +593,15 @@ var CFG = {
    * 视觉层级：① 网格与可建造空间 ② 建筑/道路/资源点/部队 ③ 山水林田等环境美术
    * 底板图负责氛围（已降饱和处理），网格负责玩法 —— 网格常驻可见，但必须是低对比、手绘质感
    */
+  /* ★ 第七十一次修订：资源点据点素材（方案A）—— 资源点从"emoji 贴纸"升级为"小型据点"
+   *   加占领旗 + 收益牌，让新玩家一眼看出"这是要争夺的目标" */
+  resourceCamps: {
+    enabled: true,
+    dir: 'assets/map/',
+    files: { food: 'camp-food.png', energy: 'camp-energy.png', logistics: 'camp-logistics.png' },
+    width: 1.5,              // 据点素材宽（占格倍数，视觉溢出到邻格）
+  },
+
   mapVisual: {
     enabled: true,
     /**

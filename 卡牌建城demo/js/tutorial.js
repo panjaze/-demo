@@ -48,6 +48,13 @@
       wait: () => { const S = global.Game && global.Game.state; return !!(S && Object.keys(S.buildings).length > 0); },
     },
     {
+      /* ★ 第七十一次修订（方案D）：新玩家"不知道要去争夺资源点" —— 加一步专门讲。 */
+      id: 'capture',
+      text: '地图上散布着 <b>9 处资源点</b>：粮仓（+50 粮/Tick）、能量水晶（+12 ⚡/Tick）、哨塔（自动铺路）。<br><b>占领后有持续产出</b>，中期的攻防就围绕它们拉锯。<br>打法：<b>修路</b>连过去 → <b>兵营造兵</b> → <b>点击己方部队</b> → <b>点击资源点</b>，清掉守军即占领。<br>敌方也在抢 —— 谁控制资源点，谁就滚雪球。',
+      center: true,
+      btn: '知道了',
+    },
+    {
       id: 'done',
       text: '入门完成！接下来的循环：<br><b>修路</b>连接资源点 → <b>出兵</b>占领它们 → 攻破敌方主城。<br>细节随时在主菜单看「玩法说明」。',
       center: true,
