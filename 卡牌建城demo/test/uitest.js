@@ -131,7 +131,7 @@ UI.render();
 console.log('\n== 1 首屏渲染 ==');
 ok('UI.render() 不抛异常', true);
 ok('遗物托盘已渲染', !!store['relic-tray']);
-ok('弃牌区显示进度文案', /弃牌/.test(store['discard-zone'].innerHTML || ''), store['discard-zone'].innerHTML);
+ok('弃牌角标有计数徽章', store['discard-count'] !== undefined, '缺 #discard-count');
 
 /* ==================== 2 建筑牌：点击 → 放置模式 → 点击地图 ==================== */
 console.log('\n== 2 建筑牌放置（点击式，与道路牌一致）==');
@@ -311,20 +311,20 @@ if (upT) {
   ok('升级牌流程不抛异常', true);
 }
 
-/* ==================== 9 拖拽到弃牌区（各卡种） ==================== */
-console.log('\n== 9 拖到弃牌区 ==');
+/* ==================== 9 弃牌模式点卡（各卡种，StS 式） ==================== */
+console.log('\n== 9 弃牌模式点卡 ==');
 Game.reset();
 S().hand = [{ key: 'farm' }, { key: 'dirt' }, { key: 'upgrade' }, { key: 'harvest' }, { key: 'repair' }];
 const kinds = ['farm', 'dirt', 'upgrade', 'harvest', 'repair'];
 let discarded = 0;
+UI.setDiscardMode(true);
 kinds.forEach(function (k, i) {
-  // 让 hitTest 命中弃牌区
-  document.elementFromPoint = function () { return store['discard-zone']; };
-  UI.startDrag(i, k, 500, 600);
-  UI.endDrag(500, 600);
+  // 弃牌模式：点手牌即弃（与实机同一条路径，不再走拖拽落区）
+  UI.onHandCardClick(i);
   if (S().hand[i] === null) discarded++;
 });
-ok('五种卡都能拖到弃牌区丢掉', discarded === kinds.length, discarded);
+UI.setDiscardMode(false);
+ok('五种卡都能在弃牌模式下点掉', discarded === kinds.length, discarded);
 
 /* ==================== 10 §19 政策三选一 ==================== */
 console.log('\n== 10 政策三选一颁布 ==');

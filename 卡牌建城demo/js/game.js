@@ -1053,15 +1053,63 @@ const Game = {
     return 'new';
   },
 
+  /** AI 当前每 Tick 能量净收入（主城 + 建筑产出 + 政策/事件/遗物等 statAdd 加值） */
+  aiEnergyIncome() {
+    const S = this.state;
+    let inc = 0;
+    const cd = CFG.castle.levels[(S.enemyLevel || 1) - 1];
+    if (cd && cd.energy) inc += cd.energy;
+    this.enemyBuildings().forEach(function (b) {
+      if (b.pending || b.type === 'barracks') return;
+      const d = CFG.buildings[b.type];
+      if (!d || !d.levels) return;
+      const y = d.levels[b.level - 1].yield || {};
+      if (y.energy) inc += y.energy;
+    });
+    inc += this.statAdd('p2', 'energyTick');
+    return inc;
+  },
+
+  /** 某条政策会让每 Tick 能量净收入变化多少（add 直加；pct 按建筑+主城的基础产出缩放） */
+  policyEnergyDelta(key, tier) {
+    const d = CFG.policy.list[key];
+    if (!d || !d.effects) return 0;
+    const base = this.aiEnergyIncome() - this.statAdd('p2', 'energyTick');
+    let delta = 0;
+    d.effects.forEach(function (e) {
+      if (e.stat !== 'energyTick') return;
+      const v = e.vals ? e.vals[tier] : e.val;
+      if (e.kind === 'add') delta += v;
+      else if (e.kind === 'pct') delta += (v / 100) * base;
+    });
+    return delta;
+  },
+
   /** AI 自动选政策：优先补当前最缺的方向（兵少 → 战争，建筑少 → 种田） */
   aiPickPolicy() {
     const P = this.state.policy.p2;
     const offer = this.rollPolicy('p2');
+    const self = this;
+    /* ★ 方案A（第六十六次修订）：选政策前先算账。
+     *   实测：AI 在 Lv1 抽到「常备军」(-3⚡/Tick) 而收入只有 2⚡/Tick 时，
+     *   能量一路负到 -200+，整局建不出兵营（40 个种子 20% 触发）。
+     *   规则：只考虑「选完后每Tick净收入仍 > 0」的选项；
+     *         若全都转负，则挑净收入损失最小的一条（总要选一条）。 */
+    const income = this.aiEnergyIncome();
+    const affordable = offer.filter(function (o) {
+      return income + self.policyEnergyDelta(o.key, o.tier) > 0;
+    });
+    let pool = affordable;
+    if (!pool.length) {
+      pool = [offer.reduce(function (a, b) {
+        return self.policyEnergyDelta(b.key, b.tier) > self.policyEnergyDelta(a.key, a.tier) ? b : a;
+      })];
+    }
     // 简单打分：己方兵少 → 战争流更值钱；兵已足 → 种田流
     const troops = this.totalTroops('p2');
     const want = troops < 25 ? 'war' : 'farm';
-    let best = offer[0], bestScore = -1e9;
-    offer.forEach(function (o) {
+    let best = pool[0], bestScore = -1e9;
+    pool.forEach(function (o) {
       const d = CFG.policy.list[o.key];
       let sc = o.tier * 10 + Math.random() * 5;
       if (d.school === want) sc += 20;

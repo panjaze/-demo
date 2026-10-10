@@ -106,7 +106,7 @@ function ck(name, cond, detail) {
   const emptySpot = await page.evaluate(() => {
     const tb = document.getElementById('topbar').getBoundingClientRect();
     const p = document.getElementById('btn-policy').getBoundingClientRect();
-    const g = document.querySelector('.s-gear').getBoundingClientRect();
+    const g = document.getElementById('btn-menu').getBoundingClientRect();   // ★ 齿轮装饰件已删，锚点改为按钮组第一个
     return { x: (p.right + g.left) / 2, y: tb.top + tb.height / 2 };
   });
   await page.mouse.move(emptySpot.x, emptySpot.y); await page.mouse.down(); await page.mouse.up();

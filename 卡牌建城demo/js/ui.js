@@ -449,13 +449,25 @@ const UI = {
 
   /* ==================== 弃牌模式 ==================== */
 
+  /** 弃牌模式点一张手牌（第六十六次修订：抽成方法，实机与测试共用同一条路径） */
+  onHandCardClick(handIdx) {
+    const item = Game.state.hand[handIdx];
+    if (!item) return false;
+    const nm = Game.cardInfo(item.key).name;
+    if (!Game.discard(handIdx)) return false;
+    Engine.audio.hurt();
+    this.setDiscardMode(false);
+    UI.hint('已弃掉「' + nm + '」（不返还资源）');
+    return true;
+  },
+
   setDiscardMode(on) {
     this.discardMode = !!on;
     const bar = $('hand-bar');
     if (bar) bar.classList.toggle('discard-mode', this.discardMode);
     const btn = $('btn-discard');
     if (btn) btn.classList.toggle('active', this.discardMode);
-    if (this.discardMode) UI.hint('弃牌模式：点一张手牌把它弃掉（再点 🗑️ 退出）');
+    if (this.discardMode) UI.hint('弃牌模式：点一张要弃掉的手牌（再点一次弃牌角标或按 Esc 退出）');
     UI.render();
   },
 
@@ -701,14 +713,10 @@ const UI = {
       const handIdx = parseInt(card.dataset.hand, 10);
       const item = Game.state.hand[handIdx];
       if (!item) return;
-      // 弃牌模式：点一下就弃掉
+      // 弃牌模式：点一下就弃掉（逻辑抽成 onHandCardClick，供测试与实机共用同一条路径）
       if (self.discardMode) {
         e.preventDefault();
-        const nm = Game.cardInfo(item.key).name;
-        Game.discard(handIdx);
-        Engine.audio.hurt();
-        self.setDiscardMode(false);
-        UI.hint('已弃掉「' + nm + '」（不返还资源）');
+        self.onHandCardClick(handIdx);
         return;
       }
       e.preventDefault();
@@ -805,9 +813,7 @@ const UI = {
       if (chip && Game.state.events.p1.current) UI.setModal('eventview');
     });
 
-    // 弃牌区高亮
-    const dz = $('discard-zone');
-    dz.addEventListener('dragover', function (e) { e.preventDefault(); });
+    // （弃牌落区已删：弃牌统一走「弃牌模式点卡」，见 setDiscardMode）
   },
 
   /** 领取任务奖励遗物（第二十次修订：遗物只能从星级任务获得） */
@@ -1054,9 +1060,7 @@ const UI = {
     g.style.top = y + 'px';
 
     // 高亮落点：交给沙盘在地图上整体绘制（Sandbox.drawDropPreview）
-    const hit = this.hitTest(x, y);
-    const dz = $('discard-zone');
-    dz.classList.toggle('dz-hover', !!(hit && hit.zone === 'discard'));
+    // ★ 第六十六次修订：弃牌落区已删 —— 弃牌统一走「弃牌模式点卡」，拖拽不再承担弃牌
 
     if (this.drag && this.drag.kind === 'building') {
       // 拿起建筑卡 = 建造模式（网格增强）；光标在地图上就显示占地幽灵框（合法与否都画，非法标红）
@@ -1081,7 +1085,6 @@ const UI = {
   hitTest(x, y) {
     const el = document.elementFromPoint(x, y);
     if (!el) return null;
-    if (el.closest('#discard-zone')) return { zone: 'discard' };
     if (!this.drag) return null;
     const dragInfo = Game.cardInfo(this.drag.key);
     const dragRepair = this.drag.kind === 'effect' && dragInfo.eff === 'repair';
@@ -1121,11 +1124,8 @@ const UI = {
     let ok = false;
 
     if (d.kind === 'effect') {
-      // 效果牌：拖到弃牌区 = 弃掉；原地松手（位移很小）= 使用；修缮牌可拖到建筑
-      if (hit && hit.zone === 'discard') {
-        ok = Game.discard(handIdx);
-        if (ok) UI.hint('已弃牌（不返还资源）');
-      } else if (d.key === 'repair' && hit && hit.zone === 'tile' && hit.repairOk) {
+      // 效果牌：原地松手（位移很小）= 使用；修缮牌可拖到建筑；要弃牌走「弃牌模式点卡」
+      if (d.key === 'repair' && hit && hit.zone === 'tile' && hit.repairOk) {
         const r = Game.repairWithCard(hit.gx, hit.gy);
         ok = r.ok;
         if (ok) UI.hint('修缮完成，防御值 +40');
@@ -1135,11 +1135,8 @@ const UI = {
         if (!ok) UI.hint('这张效果牌当前用不了（「扩建」每局最多 ' + CFG.cards.slotCap + ' 次）');
       }
     } else if (d.kind === 'road') {
-      // 道路牌：拖到弃牌区 = 弃掉；原地松手 = 进入铺路模式（点击地图逐格铺）
-      if (hit && hit.zone === 'discard') {
-        ok = Game.discard(handIdx);
-        if (ok) UI.hint('已弃牌');
-      } else if (moved < 12) {
+      // 道路牌：原地松手 = 进入铺路模式（点击地图逐格铺）；要弃牌走「弃牌模式点卡」
+      if (moved < 12) {
         const info = Game.cardInfo(d.key);
         this.roadPlacing = { key: d.key, handIdx: handIdx, left: info.tiles };
         Game.state.hand[handIdx] = null;      // 牌离手（取消时退还）
@@ -1154,15 +1151,9 @@ const UI = {
         ok = r.ok;
         if (!ok) UI.hint(r.reason === 'nocard' ? '手牌里没有升级牌' : '无法升级');
         else UI.hint('升级成功');
-      } else if (hit && hit.zone === 'discard') {
-        ok = Game.discard(handIdx);
-        if (ok) UI.hint('已弃牌（不返还资源）');
       } else if (moved < 12) {
         UI.hint('把升级牌拖到己方建筑上使用');
       }
-    } else if (hit && hit.zone === 'discard') {
-      ok = Game.discard(handIdx);
-      if (ok) UI.hint('已弃牌（不返还资源）');
     } else if (hit && hit.zone === 'tile') {
       ok = hit.merge
         ? Game.merge(handIdx, hit.gx, hit.gy)
@@ -1198,7 +1189,6 @@ const UI = {
     if (!this.drag) return;
     this.drag.ghost.remove();
     document.querySelectorAll('.dragging').forEach(function (el) { el.classList.remove('dragging'); });
-    $('discard-zone').classList.remove('dz-hover');
     const bar = $('hand-bar');
     if (bar) bar.classList.remove('dragging-now');
     this.drag = null;
@@ -1413,10 +1403,10 @@ const UI = {
       }
     }
 
-    /* ---- 弃牌角标：显示任务进度口径的弃牌数 ---- */
+    /* ---- 弃牌角标：堆叠指示器（StS 式 牌堆+数量） ---- */
     {
-      const dz2 = $('discard-zone');
-      if (dz2) dz2.innerHTML = '<span>🗑️</span>弃牌 ' + S.discardCount;
+      const dc = $('discard-count');
+      if (dc) dc.textContent = S.discardCount;
     }
 
     /* ---- 胜负结算（第四十四次修订：加演出）

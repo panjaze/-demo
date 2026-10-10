@@ -15,7 +15,6 @@
   position: relative;
 }
 .tb-deco { height: 100%; width: auto; display: block; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
-.s-gear { margin-left: auto; }
 .tb-clock {
   display: flex; flex-direction: column; line-height: 1.15;
   min-width: 128px; white-space: nowrap;
@@ -33,7 +32,7 @@
 .res-slot .res-ico { position: relative; z-index: 1; width: 27px; height: 27px; background: none; border-radius: 0; }
 .tb-res b { white-space: nowrap; font-size: 20px; font-weight: 800; color: #f4ecdc; text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 
-.tb-btns { margin-left: 8px; display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+.tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
 .tb-btn {
   pointer-events: auto; font: inherit; font-weight: 700;
   padding: 5px 12px; border-radius: 6px;
@@ -772,43 +771,23 @@ html, body {
 }
 #hand-slots .card-empty:hover { transform: rotate(var(--tilt, 0deg)) translateY(var(--lift, 0px)); }
 
+/* ★ 第六十六次修订（参考杀戮尖塔）：弃牌没有"拖到落区"，进入弃牌模式后
+ *   可弃的手牌自己上浮 + 红色描边，点哪张弃哪张；落区一类的浮层已删。 */
 #hand-bar.discard-mode {
-  border-color: #ff6b6b;
-  box-shadow: 0 0 0 2px rgba(255,107,107,.35), inset 0 0 30px rgba(255,60,60,.12);
+  box-shadow: inset 0 14px 26px rgba(120,20,20,.28);
 }
 #hand-bar.discard-mode .card:not(.card-empty) {
-  border-color: #ff8f8f;
   cursor: crosshair;
+  transform: rotate(0deg) translateY(-34px) scale(1.05);
+  box-shadow: 0 0 0 2px rgba(255,120,110,.9), 0 0 16px rgba(255,90,80,.45), 0 14px 30px rgba(0,0,0,.6);
 }
 #hand-bar.discard-mode .card:not(.card-empty):hover {
-  box-shadow: inset 0 0 0 3px rgba(255,107,107,.6), 0 12px 22px rgba(0,0,0,.55);
+  transform: rotate(0deg) translateY(-46px) scale(1.1);
+  z-index: 70;
+  box-shadow: 0 0 0 3px rgba(255,140,120,1), 0 0 22px rgba(255,90,80,.6), 0 16px 34px rgba(0,0,0,.65);
 }
 
-/* 弃牌区：平时完全不占空间，拖拽时浮到手牌栏右侧 */
-#hand-bar .discard-zone {
-  /* ★ 弃牌区放在四个角标的最左侧（角标组宽 4×68+3×8=296，再留 18px 间距），
-   *   与最左边的「弃牌」角标上下对齐，拖牌去弃牌的路径最短 */
-  position: absolute; right: 314px; top: 50%;
-  transform: translateY(-50%);
-  width: 104px; height: 96px;
-  opacity: 0; pointer-events: none;
-  z-index: 5;
-  transition: opacity .12s;
-}
-#hand-bar.dragging-now .discard-zone { opacity: 1; pointer-events: auto; }
-.discard-zone {
-  flex: 0 0 96px;
-  height: 100%;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 2px;
-  font-size: 11px; text-align: center;
-  border-radius: 8px; border: 2px dashed rgba(232,206,150,.75);
-  color: #e6d6ae; background: rgba(36,28,20,.78);
-  box-shadow: 0 4px 14px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,236,200,.18);
-  transition: all .12s;
-}
-.discard-zone span { font-size: 16px; line-height: 1; opacity: .7; }
-.dz-hover { border-color: #ff5f5f; color: #ff9f9f; background: #2a1616; }
+/* （弃牌落区样式已随落区一并删除） */
 
 /* ==================== 拖拽浮影 ==================== */
 
@@ -1116,8 +1095,6 @@ html, body {
   #hand-slots .card-choice .card-desc { font-size: 6.5px; }
   #hand-slots .card:not(.card-empty):hover { transform: rotate(0deg) translateY(-22px) scale(1.08); }
   #corner-ui { gap: 6px; right: 8px; bottom: 6px; }
-  /* 矮屏角标组 4×50+3×6=218，弃牌区跟着左移对齐 */
-  #hand-bar .discard-zone { right: 236px; width: 84px; height: 78px; }
   .corner-btn { width: 50px; height: 50px; border-radius: 8px; }
   .ck-icon { width: 22px; height: 22px; }
   .ck-label { font-size: 9px; }

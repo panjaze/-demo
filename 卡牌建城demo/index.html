@@ -32,7 +32,6 @@
         <div class="tb-res"><span class="res-slot"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/soldier.png" alt=""></span><b id="tag-soldiers">0 / 60</b></div>
 
         <button id="btn-policy" class="tb-btn tb-btn-text" title="查看/颁布政策"><img class="tb-ico" src="assets/ui/icons/ic-scroll.png" alt="">政策</button>
-        <img class="tb-deco s-gear" src="assets/ui/topbar/slot-gear.png" alt="">
         <div class="tb-btns">
           <button id="btn-menu" class="tb-btn tb-btn-icon" title="主界面"><img class="tb-ico" src="assets/ui/icons/ic-home.png" alt=""></button>
           <button id="btn-pause" class="tb-btn tb-btn-icon" title="暂停 / 继续"><img class="tb-ico" src="assets/ui/icons/ic-pause.png" alt=""></button>
@@ -79,8 +78,9 @@
 
           <!-- 右下角功能角标：牌库 / 抽卡 / 弃牌 -->
           <div id="corner-ui">
-            <button class="corner-btn corner-danger" id="btn-discard">
+            <button class="corner-btn corner-danger" id="btn-discard" title="弃牌模式：点一张手牌弃掉">
               <img class="ck-icon" src="assets/ui/icons/ic-discard.png" alt="">
+              <b class="ck-badge" id="discard-count">0</b>
               <em class="ck-label">弃牌</em>
             </button>
             <button class="corner-btn" data-modal="pool">
@@ -106,7 +106,6 @@
           <div class="row-body">
             <div id="hand-slots" class="card-row"></div>
             <div class="hb-spacer"></div>
-            <div id="discard-zone" class="discard-zone"><span>🗑️</span>弃牌</div>
             <span class="muted hb-count" id="hand-count">0 / 5</span>
           </div>
         </section>

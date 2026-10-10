@@ -42,7 +42,7 @@ if (dynPrefix.length) console.log('  动态前缀：' + [...new Set(dynPrefix)].
 ok('JS 引用的 id 在 HTML 里都存在', missing.length === 0, missing.join(', '));
 
 // 关键元素存在性（防止误删）
-['sandbox', 'hand-slots', 'hand-bar', 'discard-zone', 'hint', 'modal',
+['sandbox', 'hand-slots', 'hand-bar', 'discard-count', 'hint', 'modal',
  'tile-actions', 'ta-title', 'ta-upgrade', 'ta-demolish', 'ta-close',
  'btn-discard', 'btn-recenter', 'corner-ui', 'pool-count', 'shop-cost'].forEach(function (id) {
   ok('关键元素 #' + id + ' 存在', htmlIds.has(id));
