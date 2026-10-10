@@ -1456,19 +1456,23 @@ const UI = {
     else if (S.res.energy < CFG.shop.openCost) $('shop-hint').textContent = '能量不足，无法抽取';
     else $('shop-hint').textContent = '点击候选卡按标价买入 · 买完把手牌拖到地图空地上建造';
 
-    /* ---- 手牌（格数可变，扇形微倾 + 密度分级） ---- */
+    /* ---- 手牌（★ 第五十五次修订：150×210 大卡 + 真扇形叠放，杀戮尖塔式手牌） ---- */
     const handHost = $('hand-slots');
     handHost.innerHTML = '';
     const n = S.hand.length;
-    // 密度分级：卡越窄，显示的信息越少（避免文字竖排挤爆）
     const dens = n <= 6 ? 1 : (n === 7 ? 2 : 3);
     handHost.classList.remove('dens-1', 'dens-2', 'dens-3');
     handHost.classList.add('dens-' + dens);
-    const step = n > 1 ? Math.min(2, 10 / (n - 1)) : 0;    // 扇形总跨度约 ±5°，牌多也不叠
+    const mid = (n - 1) / 2;
+    const step = n > 1 ? Math.min(7, 14 / (n - 1)) : 0;    // 扇形总跨度约 ±7°
     S.hand.forEach(function (item, i) {
       const el = UI.makeCard(item ? item.key : null, 'hand', i, false);
-      const tilt = (i - (n - 1) / 2) * step;
-      el.style.setProperty('--tilt', tilt.toFixed(2) + 'deg');
+      const off = i - mid;                                 // -mid .. +mid
+      el.style.setProperty('--tilt', (off * step).toFixed(2) + 'deg');
+      // 弧形抬升：中间低、两侧高（扇形），边缘卡上扬
+      const lift = mid > 0 ? -(((1 - Math.abs(off) / mid) ** 2) * 22) : 0;
+      el.style.setProperty('--lift', lift.toFixed(1) + 'px');
+      el.style.zIndex = String(n - i);                     // 左压右（扇形叠放）
       handHost.appendChild(el);
     });
 

@@ -633,26 +633,29 @@ html, body {
 
 /* 手牌：卡拉满整条（格数可变），竖向排版保证信息完整，扇形微倾
    密度分级：dens-3（8 张）只缩字号，不隐藏任何信息 */
-/* ★ 第五十一次修订：竖卡手牌 —— 固定 72 宽（**不均分拉伸**，保手绘纹理不变形），
- *   hover 放大 1.7× 并展开描述（行业惯例：手牌小卡靠悬停看详情） */
-#hand-slots { flex: 0 0 auto; display: flex; gap: 14px; min-width: 0; align-items: flex-end; justify-content: center; }
+/* ★ 第五十五次修订：竖卡手牌 —— 大刀阔斧：150×210 大卡 + 真扇形叠放（杀戮尖塔式） */
+#hand-slots { flex: 0 0 auto; display: flex; gap: 0; min-width: 0; align-items: flex-end; justify-content: center; }
 #hand-slots .card {
-  flex: 0 0 72px;
+  flex: 0 0 150px; width: 150px; height: 210px;
+  margin-left: -46px;                      /* ★ 牌互相搭 30%（首张 margin 归零） */
   position: relative;
-  overflow: visible;                       /* hover 放大要溢出手牌栏 */
+  overflow: visible;                       /* hover 上浮要溢出手牌栏 */
   transform-origin: bottom center;
-  transform: rotate(var(--tilt, 0deg));
+  transform: rotate(var(--tilt, 0deg)) translateY(var(--lift, 0px));
 }
+#hand-slots .card:first-child { margin-left: 0; }
 #hand-slots .card:not(.card-empty):hover {
-  transform: rotate(var(--tilt, 0deg)) scale(1.7);
-  z-index: 40;
-  box-shadow: 0 14px 34px rgba(0,0,0,.6);
+  transform: rotate(0deg) translateY(-52px) scale(1.12);
+  z-index: 60;
+  box-shadow: 0 18px 44px rgba(0,0,0,.65);
 }
 #hand-slots .card:hover .card-desc { display: block; }
 
-/* 密度分级：8 张时收紧间距（竖卡 72 固定，只缩 gap） */
-#hand-slots.dens-2 { gap: 8px; }
-#hand-slots.dens-3 { gap: 4px; }
+/* 密度分级：8 张时收紧叠放量 */
+#hand-slots.dens-2 .card { margin-left: -58px; }
+#hand-slots.dens-2 .card:first-child { margin-left: 0; }
+#hand-slots.dens-3 .card { margin-left: -72px; }
+#hand-slots.dens-3 .card:first-child { margin-left: 0; }
 
 /* 空格：淡化的手绘框，不抢视觉 */
 #hand-slots .card-empty {
@@ -660,7 +663,7 @@ html, body {
   box-shadow: none;
   background: #e8dcc0 url('../assets/ui/card-frame-p.png') center / 100% 100% no-repeat;
 }
-#hand-slots .card-empty:hover { transform: rotate(var(--tilt, 0deg)); }
+#hand-slots .card-empty:hover { transform: rotate(var(--tilt, 0deg)) translateY(var(--lift, 0px)); }
 
 #hand-bar.discard-mode {
   border-color: #ff6b6b;
