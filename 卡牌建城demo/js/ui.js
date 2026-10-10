@@ -1585,8 +1585,12 @@ const UI = {
       : (info.kind === 'road' ? '<div class="card-cost card-kind">道路牌 · ' + info.tiles + ' 格</div>'
       : '<div class="card-cost card-kind">' + kindLabel + '</div>');
 
+    /* ★ 第五十一次修订：建筑牌的图标用建筑立绘（与地图/主界面同一画风），其余卡保留 emoji */
+    const iconHTML = (info.kind === 'building')
+      ? '<img class="card-art" src="assets/buildings/' + key + '.png" alt="">'
+      : info.icon;
     wrap.innerHTML =
-      '<div class="card-icon">' + info.icon + '</div>' +
+      '<div class="card-icon">' + iconHTML + '</div>' +
       '<div class="card-main">' +
         '<div class="card-name">' + info.name + '</div>' +
         costLine +
