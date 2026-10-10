@@ -5,6 +5,7 @@
 :root { --tb-h: 64px; }
 #topbar {
   flex: 0 0 var(--tb-h); height: var(--tb-h); min-height: 0;
+  box-shadow: inset 0 3px 7px rgba(0,0,0,.5), inset 0 -4px 9px rgba(0,0,0,.45), 0 3px 8px rgba(0,0,0,.5);
   display: flex; align-items: center; gap: 4px;
   padding: 0 10px 0 4px;
   white-space: nowrap;
@@ -13,7 +14,7 @@
   pointer-events: auto;
   position: relative;
 }
-.tb-deco { height: 100%; width: auto; display: block; }
+.tb-deco { height: 100%; width: auto; display: block; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
 .s-gear { margin-left: auto; }
 .tb-clock {
   display: flex; flex-direction: column; line-height: 1.15;
@@ -26,7 +27,8 @@
   display: flex; align-items: center; gap: 9px;
   height: 100%; padding: 0 15px 0 2px; white-space: nowrap; flex: 0 0 auto;
 }
-.res-slot { position: relative; width: 46px; height: 46px; flex: 0 0 46px; display: flex; align-items: center; justify-content: center; }
+.res-slot { position: relative; width: 46px; height: 46px; flex: 0 0 46px; display: flex; align-items: center; justify-content: center;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)); }
 .res-slot .s-circle { position: absolute; inset: 0; width: 100%; height: 100%; }
 .res-slot .res-ico { position: relative; z-index: 1; width: 27px; height: 27px; background: none; border-radius: 0; }
 .tb-res b { white-space: nowrap; font-size: 20px; font-weight: 800; color: #f4ecdc; text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
@@ -35,7 +37,7 @@
 .tb-btn {
   pointer-events: auto; font: inherit; font-weight: 700;
   padding: 5px 12px; border-radius: 6px;
-  border: none;
+  border: none; filter: drop-shadow(0 2px 3px rgba(0,0,0,.55));
   background: url('../assets/ui/crops/btn-stone.png') center / 100% 100% no-repeat;
   color: #f4ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.65);
   cursor: pointer; transition: filter .12s, transform .1s;
@@ -364,10 +366,8 @@ html, body {
   border-radius: 10px;
   border: 1px solid rgba(201,184,144,.45);
   background-color: #241c14;
-  background-image: var(--shield, none);
-  background-size: 74% auto;
-  background-position: center bottom 5px;
-  background-repeat: no-repeat;
+  background-image: linear-gradient(180deg, rgba(255,236,200,.10), rgba(0,0,0,.28));
+  box-shadow: inset 0 1px 0 rgba(255,236,200,.18), inset 0 -6px 12px rgba(0,0,0,.45);
   color: #fff; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   box-shadow: 0 4px 14px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,236,200,.22);
@@ -375,10 +375,10 @@ html, body {
 }
 .corner-btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
 .corner-btn.active { border-color: #ffd23f; box-shadow: 0 0 0 2px #ffd23f55, 0 4px 14px rgba(0,0,0,.45); }
-.corner-primary { --shield: url('../assets/ui/crops/shield-gold.png'); }
-[data-modal="pool"] { --shield: url('../assets/ui/crops/shield-blue.png'); }
-.corner-danger { --shield: url('../assets/ui/crops/shield-green.png'); }
-.corner-btn[data-modal="quest"], .corner-gold { --shield: url('../assets/ui/crops/shield-blue.png'); }
+/* ★ 第六十六次修订：三个 --shield 变量随盾影底图一并废弃 */
+.corner-primary { border-color: rgba(255,209,102,.75); }
+.corner-danger  { border-color: rgba(255,138,122,.6); }
+/* ★ 第六十六次修订：盾影底图已废弃（图标本身即素材，叠加显得"拼接"） */
 .corner-btn .ck-icon { position: relative; z-index: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
 .corner-danger.active { border-color: #ff8f8f; box-shadow: 0 0 0 2px #ff8f8f55, 0 4px 14px rgba(0,0,0,.45); }
 .ck-icon { width: 32px; height: 32px; display: block; object-fit: contain; }
@@ -468,7 +468,7 @@ html, body {
 
 /* 标题带：卡面顶部蓝图带（frame 实测 y 6.6%~17.8%）—— 大字号衬线，浅金压暗影 */
 .card-name {
-  position: absolute; left: 25%; right: 5%; top: 6.6%; height: 11.2%;
+  position: absolute; left: 5%; right: 5%; top: 6.6%; height: 11.2%;
   display: flex; align-items: center; justify-content: center;
   text-align: center;
   font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
@@ -483,9 +483,9 @@ html, body {
   font-size: 9.5px; line-height: 1.38; color: #4a3826; text-align: center;
   overflow: hidden;
 }
-.card-cost-num {   /* 费用角标：左上金属圆槽 + 金色数字 */
-  position: absolute; left: 3.5%; top: 3.8%;
-  width: 21%; aspect-ratio: 1;
+.card-cost-num {   /* 费用角标：左上金属圆槽 + 金色数字（卡名居中后缩小让位） */
+  position: absolute; left: 2.5%; top: 2.6%;
+  width: 19%; aspect-ratio: 1;
   background: url('../assets/ui/icons/gem-socket.png') center / 100% 100% no-repeat;
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 800; color: #ffe6a6;
@@ -495,8 +495,8 @@ html, body {
 }
 /* 品质/类型徽章（政策·遗物·事件）：同款金属圆槽，字色由 .tier-* 决定 */
 .card-badge {
-  position: absolute; left: 3.5%; top: 3.8%;
-  width: 21%; aspect-ratio: 1;
+  position: absolute; left: 2.5%; top: 2.6%;
+  width: 19%; aspect-ratio: 1;
   background: url('../assets/ui/icons/gem-socket.png') center / 100% 100% no-repeat;
   display: flex; align-items: center; justify-content: center;
   font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
@@ -751,6 +751,13 @@ html, body {
 }
 #hand-slots .card:hover .card-desc { display: block; }
 
+/* ★ 杀戮尖塔式选牌：点选后该卡升到手牌上方定格，目标选取期间保持（右键/点空处取消） */
+#hand-slots .card.card-selected {
+  transform: rotate(0deg) translateY(-96px) scale(1.22);
+  z-index: 90;
+  box-shadow: 0 0 0 2px rgba(255,209,102,.95), 0 0 22px rgba(255,180,60,.55), 0 20px 46px rgba(0,0,0,.7);
+}
+
 /* 密度分级：8 张时收紧叠放量 */
 #hand-slots.dens-2 .card { margin-left: -58px; }
 #hand-slots.dens-2 .card:first-child { margin-left: 0; }
@@ -779,7 +786,9 @@ html, body {
 
 /* 弃牌区：平时完全不占空间，拖拽时浮到手牌栏右侧 */
 #hand-bar .discard-zone {
-  position: absolute; right: 10px; top: 50%;
+  /* ★ 弃牌区放在四个角标的最左侧（角标组宽 4×68+3×8=296，再留 18px 间距），
+   *   与最左边的「弃牌」角标上下对齐，拖牌去弃牌的路径最短 */
+  position: absolute; right: 314px; top: 50%;
   transform: translateY(-50%);
   width: 104px; height: 96px;
   opacity: 0; pointer-events: none;
@@ -793,8 +802,9 @@ html, body {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 2px;
   font-size: 11px; text-align: center;
-  border-radius: 8px; border: 2px dashed #8a6b3a;
-  color: #c9b890; background: rgba(74,53,32,.35);
+  border-radius: 8px; border: 2px dashed rgba(232,206,150,.75);
+  color: #e6d6ae; background: rgba(36,28,20,.78);
+  box-shadow: 0 4px 14px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,236,200,.18);
   transition: all .12s;
 }
 .discard-zone span { font-size: 16px; line-height: 1; opacity: .7; }
@@ -1106,6 +1116,8 @@ html, body {
   #hand-slots .card-choice .card-desc { font-size: 6.5px; }
   #hand-slots .card:not(.card-empty):hover { transform: rotate(0deg) translateY(-22px) scale(1.08); }
   #corner-ui { gap: 6px; right: 8px; bottom: 6px; }
+  /* 矮屏角标组 4×50+3×6=218，弃牌区跟着左移对齐 */
+  #hand-bar .discard-zone { right: 236px; width: 84px; height: 78px; }
   .corner-btn { width: 50px; height: 50px; border-radius: 8px; }
   .ck-icon { width: 22px; height: 22px; }
   .ck-label { font-size: 9px; }

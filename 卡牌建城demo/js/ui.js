@@ -1487,6 +1487,8 @@ const UI = {
       const lift = mid > 0 ? -(((1 - Math.abs(off) / mid) ** 2) * 22) : 0;
       el.style.setProperty('--lift', lift.toFixed(1) + 'px');
       el.style.zIndex = String(n - i);                     // 左压右（扇形叠放）
+      /* ★ 杀戮尖塔式选牌：进入放置模式的卡升到手牌上方定格（目标选取期间保持） */
+      if (UI.placeMode && UI.placeMode.handIdx === i) el.classList.add('card-selected');
       handHost.appendChild(el);
     });
 
