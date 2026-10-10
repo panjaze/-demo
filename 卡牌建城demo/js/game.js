@@ -142,6 +142,10 @@ const Game = {
     /* §21 星级任务：questStar = 已完成星数（0~3），questClaiming = 待领遗物 */
     S.questStar = 0;
     S.questClaiming = false;
+    /* ★ 第四十九次修订：AI 的任务线与遗物（与玩家同款条件，弃牌项对 AI 不适用） */
+    S.enemyQuestStar = 0;
+    S.enemyRelics = [];
+    S.enemyTrained = 0;
     S.stats.killed = 0;        // 我方累计消灭的敌兵
     S.stats.lost = 0;          // 我方累计损失的士兵（兜底计分用）
 
@@ -847,13 +851,15 @@ const Game = {
     return b.level >= this.buildingLevelCap();
   },
 
-  /** 是否拥有某件遗物 */
-  hasRelic(k) { return this.relicCount(k) > 0; },
+  /** 是否拥有某件遗物（分侧） */
+  hasRelic(side, k) { return this.relicCount(side, k) > 0; },
 
-  /** 拥有某件遗物的数量（第十九次修订：持有上限 CFG.discard.relicCap，效果为固定值不叠乘） */
-  relicCount(k) {
+  /** 拥有某件遗物的数量（第十九次修订：持有上限 CFG.discard.relicCap，效果为固定值不叠乘）。
+   *  ★ 第四十九次修订：分侧 —— p1 = 玩家的任务奖励（state.relics），p2 = AI 的（state.enemyRelics） */
+  relicCount(side, k) {
+    const arr = side === 'p2' ? (this.state.enemyRelics || []) : this.state.relics;
     let n = 0;
-    for (const r of this.state.relics) if (r === k) n++;
+    for (const r of arr) if (r === k) n++;
     return n;
   },
 
@@ -898,7 +904,7 @@ const Game = {
     if (side === 'p1') {
       for (const k in CFG.relics) {
         const r = CFG.relics[k];
-        if (r.stat === stat && r.kind === 'pct') sum += r.val * self.relicCount(k);
+        if (r.stat === stat && r.kind === 'pct') sum += r.val * self.relicCount(side, k);
       }
     }
     return sum;
@@ -922,7 +928,7 @@ const Game = {
     if (side === 'p1') {
       for (const k in CFG.relics) {
         const r = CFG.relics[k];
-        if (r.stat === stat && r.kind === 'add') sum += r.val * self.relicCount(k);
+        if (r.stat === stat && r.kind === 'add') sum += r.val * self.relicCount(side, k);
       }
     }
     return sum;
@@ -1214,6 +1220,45 @@ const Game = {
     S.questClaiming = false;
     S.questStar++;
     this.log('任务奖励：获得遗物「' + CFG.relics[key].name + '」（' + CFG.relics[key].desc + '）');
+    return true;
+  },
+
+  /** AI 侧任务进度取值（与玩家 questValue 同款条件）。
+   *  ⚠️ 「弃牌」对 AI 不适用（AI 无手牌系统）—— 判定时视为达成，其余条件与玩家完全一致。 */
+  enemyQuestValue(stat) {
+    const S = this.state;
+    switch (stat) {
+      case 'built': return this.enemyBuildings().length;
+      case 'castleLevel': return S.enemyLevel || 1;
+      case 'captures': return S.stats.resourceCapturesP2 || 0;
+      case 'resources': {
+        let n = 0;
+        for (const k in S.resourceOwner) if (S.resourceOwner[k] === 'p2') n++;
+        return n;
+      }
+      case 'trained': return S.enemyTrained || 0;
+      case 'killed': return S.stats.lost || 0;    // 玩家的损失 = AI 的战果
+      default: return 0;
+    }
+  },
+
+  /** AI 的星级任务：与玩家同款条件（弃牌项不适用）→ 达成即自动领取一件遗物（全池随机，
+   *  与玩家「三选一」同一来源；AI 无领取 UI 故自动选）。无战报日志（用户拍板）。 */
+  checkEnemyQuests() {
+    const S = this.state;
+    const self = this;
+    if (S.over || S.enemyQuestStar >= CFG.quests.stars.length) return false;
+    const star = CFG.quests.stars[S.enemyQuestStar];
+    const allDone = star.every(function (q) {
+      if (q.stat === 'discards') return true;    // AI 无手牌系统，弃牌项不适用
+      return self.enemyQuestValue(q.stat) >= q.need;
+    });
+    if (!allDone) return false;
+    S.enemyQuestStar++;
+    /* 按 star 数在池内轮转领取 —— **固定顺序、不消耗 Math.random**：
+     * 随机领取会偏移全局随机序列，把随机敏感的时序断言（兵营到位时间、出击阈值等）抖挂（实测）。 */
+    const keys = Object.keys(CFG.relics);
+    S.enemyRelics.push(keys[S.enemyQuestStar % keys.length]);
     return true;
   },
 
@@ -1664,7 +1709,7 @@ const Game = {
       S.resourceOwner[key] = 'p1';
       S.stats.resourceCaptures = (S.stats.resourceCaptures || 0) + 1;   // §21 任务：累计占领次数
       // 遗物「开疆旗」（行为转化型）：每占领一次资源点立即 +5⚡
-      const vanguard = this.relicCount('vanguard') * CFG.relics.vanguard.val;
+      const vanguard = this.relicCount('p1', 'vanguard') * CFG.relics.vanguard.val;
       if (vanguard > 0) {
         S.res.energy += vanguard;
         this.log('开疆旗：占领得 +⚡' + vanguard);
@@ -1676,6 +1721,9 @@ const Game = {
     if (t.p2 > 0 && t.p1 === 0 && S.resourceOwner[key] !== 'p2') {
       S.resourceOwner[key] = 'p2';
       S.resGuard[key] = CFG.hp.resourceGuard;   // 敌方占领后守军恢复满值（防反复易手）
+      S.stats.resourceCapturesP2 = (S.stats.resourceCapturesP2 || 0) + 1;   // ★ AI 任务：累计占领
+      /* ★ 遗物「开疆旗」对 AI 同样生效（静默加能量 —— 用户拍板不加战报日志） */
+      S.enemyRes.energy += this.statAdd('p2', 'captureEnergy');
       this.log('敌方占领「' + r.name + '」');
       this.pushFx({ kind: 'flash', gx: gx, gy: gy, side: 'p2', capture: true, resource: true });
       return 'p2';
@@ -1885,15 +1933,19 @@ const Game = {
   enemyTick() {
     const S = this.state;
     const er = S.enemyRes;
+    const yMul = this.statMul('p2', 'allYield');   // ★ 遗物「效率蓝图」对 AI 同样生效
     this.enemyBuildings().forEach(function (b) {
       if (b.pending || b.type === 'barracks') return;
       const d = def(b.type);
       if (!d.levels) return;
       const y = d.levels[b.level - 1].yield || {};
-      for (const k in y) er[k] += y[k];
+      for (const k in y) er[k] += y[k] * yMul;
     });
     const ecd = CFG.castle.levels[(S.enemyLevel || 1) - 1];
     if (ecd && ecd.energy) er.energy += ecd.energy;
+    /* ★ 遗物「商队契约 / 税吏印 / 粮仓」对 AI 同样生效（与玩家 applyTick 的 statAdd 对称） */
+    er.energy += this.statAdd('p2', 'energyTick');
+    er.food += this.statAdd('p2', 'foodTick');
   },
 
   /** 敌方兵营产兵（与玩家 trainAll 同一套表：从兵营格出兵、耗粮、受相邻农田加成） */
@@ -1912,7 +1964,9 @@ const Game = {
       const room2 = self.maxTroops('p2') - self.activeTroops('p2');
       if (room2 <= 0) return;
       S.enemyRes.food -= t.food;
-      self.addTroops(b.gx, b.gy, 'p2', Math.min(t.count + self.trainBonus('p2'), room2));
+      const add = Math.min(t.count + self.trainBonus('p2'), room2);
+      self.addTroops(b.gx, b.gy, 'p2', add);
+      S.enemyTrained = (S.enemyTrained || 0) + add;   // ★ AI 任务「累计训练」
       b.trainT -= iv;
     });
   },
@@ -2411,7 +2465,7 @@ const Game = {
         const gx = +p[0], gy = +p[1];
         const d = Math.abs(gx - b.gx) + Math.abs(gy - b.gy);
         // 遗物「哨塔图纸」：射程 1~2 格 → 1~3 格
-        const range = 2 + (side === 'p1' && self.relicCount('watchtower') > 0 ? 1 : 0);
+        const range = 2 + (self.relicCount(side, 'watchtower') > 0 ? 1 : 0);   // 遗物「哨塔图纸」分侧生效
         if (d >= 1 && d <= range) targets.push({ gx: gx, gy: gy, d: d });
       }
       if (!targets.length) continue;                 // 无目标：杀伤留存
@@ -2656,6 +2710,7 @@ const Game = {
     this.eventTick();
     this.logisticsRoadTick(dt);
     this.checkQuests();
+    this.checkEnemyQuests();   // ★ AI 的星级任务（与玩家同款条件，弃牌项不适用）
 
     // 离散推进：经济 Tick（高倍速下可能一帧跨多个 Tick）
     let guard = 0;

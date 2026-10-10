@@ -85,6 +85,10 @@ function place(type, gx, gy, level, owner) {
   return Game.buildingAt(gx, gy);
 }
 function rich() { S().res.energy = 99999; S().res.material = 99999; S().res.food = 99999; }
+/** 测试辅助：钉住 AI 的成长线（任务 + 开局政策）—— 需要确定性数值断言的 AI 用例用。
+ *  AI 开局政策是**随机**的（第四十六次修订：reset 即自动选一条），随机到战争流
+ *  「攻城 +25%」时伤害/经济断言就会抖动（实测"8兵换8防御值"在剩 10/12 之间跳）。 */
+function pinAI() { S().enemyQuestStar = 99; S().policy.p2.slots = []; }
 /** 测试辅助：贪心铺路到目标（自动绕开资源点等不可铺的格子） */
 function layRoadTo(ax, ay, bx, by) {
   for (let guard = 0; guard < 600; guard++) {
@@ -659,7 +663,7 @@ ok('敌方多 → 我方全灭、敌方剩 5',
    Game.troopsAt(w15.gx, w15.gy));
 
 head('15b 战争：攻城与占领');
-Game.reset(); rich();
+Game.reset(); rich(); pinAI();
 const b15 = { gx: CASTLE().gx + 1, gy: CASTLE().gy };
 const fb = place('farm', b15.gx, b15.gy, 1);       // Lv1 防御值 20
 Game.addTroops(b15.gx, b15.gy, 'p2', 8);           // 敌方 8 兵驻在我方建筑格
@@ -722,7 +726,7 @@ ok('全军覆没', Game.troopsAt(rd.gx, rd.gy).p1 === 0);
 ok('未占领', Game.resourceOwnerOf(rd) === null);
 
 head('15e 敌方 AI（与玩家同一套规则）');
-Game.reset();
+Game.reset(); pinAI();
 ok('敌方初始资源与玩家一致',
    S().enemyRes.energy === CFG.resource.initial.energy &&
    S().enemyRes.material === CFG.resource.initial.material &&
@@ -825,8 +829,7 @@ ok('AI 的建筑没有压在道路或资源点上', badAI.length === 0, badAI);
 ok('道路上没有建筑（全局）', badAI.filter(function (x) { return /路上有建筑/.test(x); }).length === 0);
 
 head('16 系统体检：900 秒长局不变量');
-Game.reset();
-rich();
+Game.reset(); rich(); pinAI();
 for (let i = 0; i < 900; i++) Game.update(1);   // 完整跑一局
 const bad16 = [];
 // ① 资源永不为负
@@ -1101,7 +1104,7 @@ ok('出击阈值已配置且递增（抢点 < 建筑 < 主城）',
    CFG.enemy.pushPoint < CFG.enemy.pushBuilding &&
    CFG.enemy.pushBuilding < CFG.enemy.pushCastle,
    { point: CFG.enemy.pushPoint, building: CFG.enemy.pushBuilding, castle: CFG.enemy.pushCastle });
-Game.reset();
+Game.reset(); pinAI();
 clearPresetRoads();                        // 清掉初始官道 → 构造真正的「无路可达」
 Game.addTroops(S().enemyCastle.gx, S().enemyCastle.gy, 'p2', CFG.enemy.pushCastle - 5);
 ok('兵力不足攻城阈值时不出击',
@@ -1548,6 +1551,27 @@ Game.reset();
 S().stats.built = 4; S().castleLevel = 2; S().stats.trained = 60;   // 缺弃牌与资源点
 Game.checkQuests();
 ok('一星未全达标不触发遗物', S().questClaiming === false, S().questStar);
+
+/* ============ 21c AI 的任务线与遗物（第四十九次修订） ============ */
+head('21c AI 的任务线与遗物（与玩家同款条件，弃牌项不适用）');
+Game.reset(); pinAI();
+S().enemyQuestStar = 0;                     // 解钉，测任务本身
+S().enemyLevel = 2;                         // 一星：主城 Lv2
+for (let i = 0; i < 4; i++) S().buildings[(20 + i) + ',' + (5 + i)] = { gx: 20 + i, gy: 5 + i, type: 'farm', level: 1, owner: 'p2' };
+S().resourceOwner[CFG.map.resources[1].gx + ',' + CFG.map.resources[1].gy] = 'p2';
+S().enemyTrained = 40;
+ok('AI 一星条件达成 → 自动领取遗物',
+   Game.checkEnemyQuests() === true && S().enemyQuestStar === 1 && S().enemyRelics.length === 1,
+   { star: S().enemyQuestStar, relics: S().enemyRelics });
+ok('AI 遗物走 p2 聚合（玩家侧不受影响）',
+   Game.relicCount('p2', S().enemyRelics[0]) === 1 && Game.relicCount('p1', S().enemyRelics[0]) === 0);
+ok('AI 二星条件未达不再领', Game.checkEnemyQuests() === false && S().enemyQuestStar === 1);
+ok('弃牌项对 AI 视为达成（AI 无手牌系统，其余 4 项与玩家一致）', (function () {
+  S().enemyQuestStar = 1;                   // 二星：built 9 / Lv3 / captures 3 / killed 20（discards 视为达成）
+  S().stats.lost = 20; S().stats.resourceCapturesP2 = 3; S().enemyLevel = 3;
+  for (let i = 0; i < 9; i++) S().buildings[(30 + i) + ',' + (5 + i)] = { gx: 30 + i, gy: 5 + i, type: 'farm', level: 1, owner: 'p2' };
+  return Game.checkEnemyQuests() === true && S().enemyQuestStar === 2 && S().enemyRelics.length === 2;
+})());
 
 console.log('\n---- 自检结果：' + pass + ' 通过 / ' + fail + ' 失败 ----');
 process.exit(fail ? 1 : 0);
