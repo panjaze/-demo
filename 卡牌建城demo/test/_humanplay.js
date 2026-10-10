@@ -1,4 +1,4 @@
-/* _humanplay.js —— 真人模拟实机测试（第四十四次修订新增）
+/* _humanplay.js —— 真人模拟实机测试（第四十五次修订新增）
  *
  * 运行：NODE_PATH=... node test/_humanplay.js [局数=1] [倍速=4] [目标游戏秒=1800]
  *
@@ -11,7 +11,7 @@
  *   ② **死点击**：点了之后状态与提示文案都没变（既没生效、也没给出反馈）
  *   ③ 提示与行为矛盾：提示说"出发了"但 march 是空的之类
  *   ④ 卡死：连续 N 拍状态毫无变化
- *   ⑤ 结算卡是否自动出现（第四十三次修订修过的那个 bug 的回归）
+ *   ⑤ 结算卡是否自动出现（第四十四次修订修过的那个 bug 的回归）
  */
 const { chromium } = require('playwright-core');
 const CHROME = 'C:/Users/123/.agent-browser/browsers/chrome-154.0.8037.57/chrome.exe';
@@ -266,7 +266,7 @@ async function act() {
     }
 
     const end = await st();
-    /* 结算卡是否自动出现（回归第四十三次修订的 bug） */
+    /* 结算卡是否自动出现（回归第四十四次修订的 bug） */
     let resultShown = false;
     if (end.over) {
       resultShown = await page.locator('#result-overlay:not(.hidden)')

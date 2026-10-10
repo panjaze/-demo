@@ -23,7 +23,7 @@ const scene = {
     const S = Game.state;
     if (!S) return;
 
-    /* ★ 对局结束必须补一次全量渲染（第四十三次修订抓到并修掉的 bug）
+    /* ★ 对局结束必须补一次全量渲染（第四十四次修订抓到并修掉的 bug）
      * 旧版只有 tickCount 变化时才走 UI.render()；对局一结束 tickCount 就停住了，
      * 主循环只剩轻量 UI.refresh()，而「结算卡 + 结算演出」只在 render() 里触发 ——
      * 于是破城后画面毫无反应（除非玩家恰好点了什么触发一次 render）。

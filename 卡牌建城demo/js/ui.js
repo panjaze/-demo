@@ -11,7 +11,7 @@ const $ = function (id) { return document.getElementById(id); };
 const RES_META = {
   energy:    { icon: '⚡',  name: '能量' },
   food:      { icon: '🌾', name: '粮食' },
-  /* ★ 物流点（第四十四次修订补）：
+  /* ★ 物流点（第四十五次修订补）：
    *   `CFG.map.resources` 里有 4 个 `res: 'logistics'` 的物流点（第二十八次修订把矿点改过来的），
    *   但这里一直没登记 → 任何 `RES_META[r.res].icon` 都抛 TypeError。
    *   破坏力在于：它发生在**点击处理器里**，异常会杀死处理器 → 玩家点击物流点"点了没反应"
@@ -71,7 +71,7 @@ const UI = {
   init() {
     this.modal = null;               // 'shop' | 'pool' | null
     this.discardMode = false;
-    this._resultShown = false;       // 结算演出只触发一次（第四十三次修订）
+    this._resultShown = false;       // 结算演出只触发一次（第四十四次修订）
     this.tileSel = null;             // 选中的己方建筑格 { gx, gy, isCastle }
     this.roadPlacing = null;         // 铺路模式 { key, handIdx, left, card }
     this.bindTopbar();
@@ -370,7 +370,7 @@ const UI = {
     }
 
     /* ②b 点自己主动铺的路 → 弹操作条（可拆除）。
-     * 第四十五次修订：道路有了每方额度上限，"铺拆结合"就必须能拆 —— 否则额度满了就死路一条。 */
+     * 第四十六次修订：道路有了每方额度上限，"铺拆结合"就必须能拆 —— 否则额度满了就死路一条。 */
     if (!sel && this.isMyRoadClick(gx, gy)) {
       this.tileSel = { gx: gx, gy: gy, isRoad: true };
       Engine.audio.click();
@@ -574,7 +574,7 @@ const UI = {
     $('ta-demolish').addEventListener('click', function () {
       const t = UI.tileSel;
       if (!t || t.isCastle) return;
-      if (t.isRoad) {                                   // 第四十五次修订：拆路释放额度
+      if (t.isRoad) {                                   // 第四十六次修订：拆路释放额度
         if (Game.demolishRoad(t.gx, t.gy, 'p1')) {
           Engine.audio.hit();
           UI.tileSel = null;
@@ -677,7 +677,7 @@ const UI = {
            * 商店里除了建筑牌还有**道路牌 / 效果牌**，它们的 key 不在 CFG.buildings 里。
            * 旧版在"买不起一张道路/效果牌"时直接 `undefined.name` 抛异常，
            * 而异常会**杀掉当前点击处理器**——玩家的感受就是"点了没反应"（踩坑 #1 的典型形态）。
-           * 第四十四次修订：由真人模拟测试（test/_humanplay.js 随机点商店卡）抓到。 */
+           * 第四十五次修订：由真人模拟测试（test/_humanplay.js 随机点商店卡）抓到。 */
           const info = Game.cardInfo(type);
           UI.hint('能量不足，买不起「' + ((info && info.name) || type) + '」（需 ' +
                   ((info && info.price) || 0) + ' ⚡）');
@@ -1260,7 +1260,7 @@ const UI = {
     $('btn-pause').textContent = S.over ? '已结束' : (S.paused ? '继续' : '暂停');
     $('slot-count').textContent = Game.buildingsUsed();
     $('slot-max').textContent = Game.typeCap('farm') * 5;
-    /* 道路额度（第四十五次修订）：铺满就得拆旧路，必须让玩家看得见 */
+    /* 道路额度（第四十六次修订）：铺满就得拆旧路，必须让玩家看得见 */
     const rc = Game.roadCountOf('p1'), rcap = CFG.map.roadCapPerSide || 0;
     $('road-count').textContent = rc;
     $('road-cap').textContent = rcap;
@@ -1400,7 +1400,7 @@ const UI = {
       if (dz2) dz2.innerHTML = '<span>🗑️</span>弃牌 ' + S.discardCount;
     }
 
-    /* ---- 胜负结算（第四十三次修订：加演出）
+    /* ---- 胜负结算（第四十四次修订：加演出）
      * 先让沙盘把「主城爆炸」演完，再拉幕出结算卡；卡片本身分 5 段登场（见 CSS 的 wb-result-*）。 */
     const ro = $('result-overlay');
     if (S.result) {
@@ -1505,7 +1505,7 @@ const UI = {
     bar.classList.remove('hidden');
     $('ta-demolish').classList.remove('hidden');
 
-    /* 道路选中：只能拆（第四十五次修订）。拆掉会释放 1 格道路额度。 */
+    /* 道路选中：只能拆（第四十六次修订）。拆掉会释放 1 格道路额度。 */
     if (t.isRoad) {
       $('ta-upgrade').classList.add('hidden');
       $('ta-demolish').classList.remove('hidden');

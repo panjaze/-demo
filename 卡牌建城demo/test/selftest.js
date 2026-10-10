@@ -15,7 +15,7 @@ vm.runInContext(fs.readFileSync(base + 'config.js', 'utf8'), ctx);
 vm.runInContext(fs.readFileSync(base + 'game.js', 'utf8'), ctx);
 const { CFG, Game } = ctx;
 
-/* ★ 第四十五次修订：机械类用例（行军/寻路/对称性）不测道路额度，
+/* ★ 第四十六次修订：机械类用例（行军/寻路/对称性）不测道路额度，
  *   这里把额度放宽 —— 否则贪心铺路的助手会因额度用尽而提前收工、误报失败。
  *   额度本身在 §10e 有专门用例（那里会临时改成 5 来测）。 */
 CFG.map.roadCapPerSide = 9999;
@@ -185,7 +185,7 @@ const g1 = Game.applyTick();
 ok('第1个Tick 新建筑不产出（pending）', g1.food === 0, g1);
 ok('pending 已清除', Game.buildingAt(n4.gx, n4.gy).pending === false);
 const g2 = Game.applyTick();
-/* ★ 第四十五次修订：不再把农田产量写死，改成与 config 对齐 —— 否则每次调数值都要改测试，
+/* ★ 第四十六次修订：不再把农田产量写死，改成与 config 对齐 —— 否则每次调数值都要改测试，
  *   而这条真正要守的是「农田确实产粮了」。 */
 const FARM_Y1 = CFG.buildings.farm.levels[0].yield.food;
 ok('第2个Tick 农田开始产粮 +' + FARM_Y1, g2.food === FARM_Y1, g2);
@@ -481,7 +481,7 @@ ok('粮尽后停军（march 清空）', S().march.length === 0, S().march.length
 ok('★ 停军不丢兵（兵留在格上，不是凭空消失）',
    Game.totalTroops('p1') === beforeStop, { 前: beforeStop, 后: Game.totalTroops('p1') });
 
-/* ---------- 10e. 道路额度（第四十五次修订，用户拍板方案 A） ----------
+/* ---------- 10e. 道路额度（第四十六次修订，用户拍板方案 A） ----------
  * 规则：每方"主动铺设"的路有格数上限，预设官道/桥不占；铺满要拆旧路才能继续（铺拆结合）。 */
 head('10e 道路额度');
 Game.reset(); rich();
@@ -593,7 +593,7 @@ const eBase = S().res.energy;
 for (let i = 0; i < 90; i++) Game.applyTick();
 const income = S().res.energy - eBase;
 const castleCost = CFG.castle.levels.slice(0, 4).reduce(function (s, l) { return s + (l.upCost ? l.upCost.energy : 0); }, 0);
-/* ★ 第四十四次修订：这里改成断言**设计不变量**，而不是把某个具体数字写死。
+/* ★ 第四十五次修订：这里改成断言**设计不变量**，而不是把某个具体数字写死。
  *   意义：升满主城的总成本必须能被"一局能量收入"覆盖 —— 否则 Lv4/Lv5、
  *   黄金政策池、士兵上限 120~140 这些内容就是"做完了但活不到"（本轮修的就是这个）。
  *   旧版写死 515，于是数值一调测试就红，却守不住真正要守的东西。 */

@@ -687,7 +687,7 @@ const Sandbox = {
     CFG.map.resources.forEach((r) => {
       const owner = (G && G.state) ? G.resourceOwnerOf(r) : null;
       const ring = owner === 'p1' ? COL.p1 : (owner === 'p2' ? COL.p2 : null);
-      /* 资源点图标：粮点 🌾 / 能源点 ⚡ / 物流点 🛣️（第四十四次修订：
+      /* 资源点图标：粮点 🌾 / 能源点 ⚡ / 物流点 🛣️（第四十五次修订：
        * 这里原本判的是 'material'——那是已删除的物资体系遗留，导致物流点被画成 ⚡） */
       const ico = r.res === 'food' ? '🌾' : (r.res === 'logistics' ? '🛣️' : '⚡');
       icon(r.gx, r.gy, ico, 0.46, ring);
@@ -746,7 +746,7 @@ const Sandbox = {
           let w = Math.round(fw * 1.02);
           let h = Math.round(tall ? fh * 0.50 + T * 1.05 : fh * 0.60 + T * 0.52);
           let px = cx - w / 2, py = y0 + fh - T * 0.06 - h, ga = 1;
-          /* 落成 / 升级：底边锚定的纵向弹跳（第四十三次修订）。
+          /* 落成 / 升级：底边锚定的纵向弹跳（第四十四次修订）。
            * 旧版建筑是"凭空出现"，这是"demo 感"的主要来源之一。 */
           const pop = this.popOf(gx, gy, performance.now());
           if (pop) {
@@ -973,7 +973,7 @@ const Sandbox = {
     this.moves.push({ x0: x0, y0: y0, x1: x1, y1: y1, side: side, n: n, t0: performance.now() });
   },
 
-  /* ==================== 表现层特效（第四十三次修订） ====================
+  /* ==================== 表现层特效（第四十四次修订） ====================
    * 逻辑层（Game）只往 Game.fx 里放"刚刚发生了什么"，这里消费并画出来，
    * 顺便触发引擎的震屏/顿帧与音效 —— 分层仍然是干净的：Game 不碰渲染。
    * 时长（ms）：pop 480 / burst 620 / flash 560 / blast 1200。 */

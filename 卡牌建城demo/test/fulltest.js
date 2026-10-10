@@ -146,7 +146,7 @@ const drag = async (fromBox, toXY) => {
   });
 
   await step('S4c 商店：买不起「道路牌/效果牌」时必须给提示且不抛异常', async () => {
-    /* 第四十四次修订：真人模拟测试（_humanplay.js）随机点商店卡时抓到
+    /* 第四十五次修订：真人模拟测试（_humanplay.js）随机点商店卡时抓到
      * `Cannot read properties of undefined (reading 'name')` ——
      * 旧代码在"买不起"分支写死 CFG.buildings[type].name，
      * 而商店里还有**道路牌 / 效果牌**，它们的 key 不在 CFG.buildings 里 → 抛异常 →
@@ -172,7 +172,7 @@ const drag = async (fromBox, toXY) => {
   });
 
   await step('S4d 点击每一种资源点都必须给提示且不抛异常', async () => {
-    /* 第四十四次修订：物流点的 res='logistics' 一直没登记进 ui.js 的 RES_META，
+    /* 第四十五次修订：物流点的 res='logistics' 一直没登记进 ui.js 的 RES_META，
      * 于是点它会执行 RES_META['logistics'].icon → TypeError → **点击处理器被杀死** →
      * 玩家看到的是"点了没反应"。真人模拟测试随机点地图时抓到。
      * 这里把地图上每一种资源类型都点一遍，确定性锁死（旧测试从没点过物流点）。 */
@@ -475,7 +475,7 @@ const drag = async (fromBox, toXY) => {
   });
   await step('S13b 结算卡 → 重新开始', async () => {
     await forceClose();   // 清掉胜利瞬间可能叠加的政策/奖励弹窗，让结算卡可点
-    /* 第四十三次修订：结算卡现在有出场延迟（先让沙盘演"主城爆炸"），所以要等它真的出现 */
+    /* 第四十四次修订：结算卡现在有出场延迟（先让沙盘演"主城爆炸"），所以要等它真的出现 */
     await page.locator('#result-overlay:not(.hidden)').waitFor({ state: 'visible', timeout: 4000 }).catch(() => {});
     await page.waitForTimeout(250);
     const vis = await page.locator('#result-card').isVisible().catch(() => false);
@@ -494,7 +494,7 @@ const drag = async (fromBox, toXY) => {
     log('S13b', s.over === false && s.buildings === 0, JSON.stringify(s));
   });
   await step('S13d 对局结束后结算卡必须自动出现（不依赖任何点击）', async () => {
-    /* 第四十三次修订抓到并修掉的 bug：对局一结束 tickCount 就停住，
+    /* 第四十四次修订抓到并修掉的 bug：对局一结束 tickCount 就停住，
      * 主循环只剩轻量 refresh()，而结算卡只在全量 render() 里触发 →
      * 破城后画面毫无反应。旧版 S13b 之所以没发现，是因为测试的 ff() 末尾
      * 显式调了一次 UI.render()，把 bug 掩盖了。这一步故意**不调 render()**。 */

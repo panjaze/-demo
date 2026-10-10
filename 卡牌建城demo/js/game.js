@@ -38,7 +38,7 @@ const Game = {
 
   state: null,
 
-  /* ==================== 表现层事件队列（第四十三次修订） ====================
+  /* ==================== 表现层事件队列（第四十四次修订） ====================
    * 「刚刚发生了什么」的纯表现层事件，交给渲染层消费（沙盘画特效、引擎震屏/顿帧）。
    * ⚠️ 故意**不放进 state**：
    *   ① 它是渲染的附属品，不该参与存档、也不该影响任何逻辑断言（selftest 直接用它测不到）；
@@ -144,7 +144,7 @@ const Game = {
 
     this.state = S;
     // 开局立刻给一次政策三选一（事件牌要从第 3 分钟才开始）
-    /* ★ 第四十五次修订：AI 也要发政策（它原来只发玩家）。
+    /* ★ 第四十六次修订：AI 也要发政策（它原来只发玩家）。
      *   aiPickPolicy() 早就写好了，只是从来没人给 AI 发 offer —— 属于"功能写完了没接线"，
      *   和 Engine.save / Sandbox.addMove 是同一类问题。 */
     if (CFG.policy.startPick) { this.offerPolicy('p1'); this.offerPolicy('p2'); }
@@ -365,7 +365,7 @@ const Game = {
    */
   canPlaceRoadFor(side, gx, gy) {
     if (!this.canPlaceRoad(gx, gy)) return false;
-    /* 第四十五次修订：道路额度上限（用户拍板的方案 A）。预设官道不占额度。 */
+    /* 第四十六次修订：道路额度上限（用户拍板的方案 A）。预设官道不占额度。 */
     if (this.roadBudgetLeft(side) <= 0) return false;
     const f = this.roadFrontier(side);
     for (let i = 0; i < f.length; i++) {
@@ -396,14 +396,14 @@ const Game = {
   },
 
   /**
-   * 铺一格路。side = 出资方（第四十五次修订）：
+   * 铺一格路。side = 出资方（第四十六次修订）：
    * 记在路对象上，用来算"每方道路额度"（预设官道/桥没有 side，不计入任何一方）。
    * ⚠️ 调用方务必传对 side —— 漏传会默认算成 p1，把 AI 的路记到玩家头上。
    */
   placeRoad(gx, gy, side) {
     if (!this.canPlaceRoad(gx, gy)) return false;
     const who = side || 'p1';
-    /* ★ 第四十五次修订：这里是铺路的**唯一入口**，额度也在这里拦 ——
+    /* ★ 第四十六次修订：这里是铺路的**唯一入口**，额度也在这里拦 ——
      *   任何绕过它直接写 state.roads 的写法都会让额度形同虚设（AI 原本就是这么写的，已改）。 */
     if (this.roadBudgetLeft(who) <= 0) return false;
     this.state.roads[this.tileKeyOf(gx, gy)] = { tier: 1, side: who };
@@ -418,7 +418,7 @@ const Game = {
     return n;
   },
 
-  /** 某方还能铺几格路（第四十五次修订：道路额度上限） */
+  /** 某方还能铺几格路（第四十六次修订：道路额度上限） */
   roadBudgetLeft(side) {
     return Math.max(0, (CFG.map.roadCapPerSide || 999) - this.roadCountOf(side || 'p1'));
   },
@@ -810,7 +810,7 @@ const Game = {
     S.hand[handIdx] = null;
     S.stats.built++;
     this.syncCastleHp();
-    this.pushFx({ kind: 'pop', gx: gx, gy: gy, side: 'p1' });   // 落成动画（第四十三次修订）
+    this.pushFx({ kind: 'pop', gx: gx, gy: gy, side: 'p1' });   // 落成动画（第四十四次修订）
     this.log('建成 Lv1 ' + def(type).name + '　(' + gx + ',' + gy + ')');
     return true;
   },
@@ -1672,7 +1672,7 @@ const Game = {
     const loss = Math.min(t.p1, t.p2);
     this.state.stats.killed = (this.state.stats.killed || 0) + loss;
     this.state.stats.lost = (this.state.stats.lost || 0) + loss;
-    /* 表现层：让「数量抵消」看得见（第四十三次修订）。
+    /* 表现层：让「数量抵消」看得见（第四十四次修订）。
      * 旧版这里只是把兵数改掉，画面上两队兵"啪"地一起消失，玩家感知不到战斗过程。 */
     this.pushFx({
       kind: 'burst', gx: gx, gy: gy, loss: loss,
@@ -2000,7 +2000,7 @@ const Game = {
       if (d < bestD) { bestD = d; best = { gx: p.gx, gy: p.gy }; }
     });
     if (!best) return false;
-    /* ★ 第四十五次修订：AI 也必须走 placeRoad（它原本直接写 S.roads，绕过了道路额度，
+    /* ★ 第四十六次修订：AI 也必须走 placeRoad（它原本直接写 S.roads，绕过了道路额度，
      *   额度对 AI 形同虚设 —— 和"AI 行军不耗粮"是同一类不对称 bug）。 */
     if (!this.placeRoad(best.gx, best.gy, 'p2')) return false;
     S.enemyRes.energy -= CFG.cards.roads.dirt.price;
