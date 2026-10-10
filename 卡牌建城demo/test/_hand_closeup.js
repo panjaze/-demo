@@ -9,9 +9,11 @@ const CHROME = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
   await page.evaluate(() => {
     if (window.Menu) Menu.start(true);
     if (window.Tutorial) Tutorial.choose(false);   // 新局会弹选择界面，选"跳过"
-    /* start(true) 会 reset —— 手牌要在 reset 之后塞 */
+    /* start(true) 会 reset —— 手牌要在 reset 之后塞；同时清开局弹窗（会挡 hover） */
     Game.state.hand = [{ key: 'farm' }, { key: 'barracks' }, { key: 'dirt' }, { key: 'harvest' }, null];
     Game.state.res.energy = 60;
+    Game.state.policy.p1.offer = null; Game.state.events.p1.offer = null;
+    if (UI.setModal) UI.setModal(null);
     if (window.UI) UI.render();
   });
   await page.waitForTimeout(800);
@@ -37,6 +39,9 @@ const CHROME = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
   });
   await page.screenshot({ path: 'test/_art_card_one.png',
     clip: { x: r.x - 4, y: r.y - 4, width: r.w + 8, height: r.h + 8 } });
+  await page.hover('#hand-slots .card');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: 'test/_art_card_hover.png', clip: { x: 330, y: 390, width: 440, height: 330 } });
   await page.screenshot({ path: 'test/_art_probe_bare.png', clip: { x: 0, y: 0, width: 200, height: 140 } });
   await page.screenshot({ path: 'test/_art_hand_closeup.png', clip: { x: 0, y: 580, width: 1280, height: 140 } });
   await browser.close();

@@ -526,10 +526,10 @@ const UI = {
         const el = document.createElement('div');
         el.className = 'card card-relic';
         el.dataset.reward = i;
-        el.innerHTML = '<div class="card-icon">' + rc.icon + '</div>' +
-          '<div class="card-main"><div class="card-name">' + rc.name + '</div>' +
-          '<div class="card-cost card-kind">遗物 · 永久生效</div>' +
-          '<div class="card-desc">' + rc.desc + '</div></div>';
+        el.innerHTML = '<div class="card-art-zone"><div class="card-art-emoji">' + rc.icon + '</div></div>' +
+          '<div class="card-nameplate"><div class="card-name">' + rc.name + '</div>' +
+          '<div class="card-kind-line">遗物 · 永久生效</div></div>' +
+          '<div class="card-desc">' + rc.desc + '</div>';
         host.appendChild(el);
       });
     } else if (mode === 'pool') {
@@ -852,13 +852,14 @@ const UI = {
       const el = document.createElement('div');
       el.className = 'card card-relic' + (pickable ? '' : ' card-dim');
       if (pickable) el.dataset.policy = String(idx);
+      /* ★ 竖卡三段式（第五十一次修订）：立绘区 = 流派徽章；名称条含品质徽章 */
       el.innerHTML =
-        '<div class="card-icon">' + d.icon + '</div>' +
-        '<div class="card-main"><div class="card-name">' + d.name +
+        '<div class="card-art-zone"><div class="card-art-emoji">' + d.icon + '</div></div>' +
+        '<div class="card-nameplate"><div class="card-name">' + d.name +
         ' <span class="tier tier-' + tier + '">' + CFG.policy.tierIcons[tier] +
         CFG.policy.tierNames[tier] + '</span></div>' +
-        '<div class="card-cost card-kind">' + school.icon + ' ' + school.name + '流</div>' +
-        '<div class="card-desc">' + desc + '</div></div>';
+        '<div class="card-kind-line">' + school.icon + ' ' + school.name + '流</div></div>' +
+        '<div class="card-desc">' + desc + '</div>';
       return el;
     };
 
@@ -1579,24 +1580,20 @@ const UI = {
                      (isShop ? ' card-shop' : (zone === 'pool' ? ' card-pool' : ' card-hand')) +
                      (info.kind === 'effect' ? ' card-effect' : '');
 
+    /* ★ 第五十一次修订：竖卡三段式 —— 费用角标（左上）/ 立绘区（大半）/ 名称条（底部）；
+     *   desc 在手牌小卡隐藏、悬停放大态显示（行业惯例，见交接文档 §31） */
     const kindLabel = { building: '建筑牌', road: '道路牌', upgrade: '升级牌', effect: '效果牌' }[info.kind];
-    const costLine = (info.kind === 'building')
-      ? '<div class="card-cost card-kind">建筑牌</div>'
-      : (info.kind === 'road' ? '<div class="card-cost card-kind">道路牌 · ' + info.tiles + ' 格</div>'
-      : '<div class="card-cost card-kind">' + kindLabel + '</div>');
-
-    /* ★ 第五十一次修订：建筑牌的图标用建筑立绘（与地图/主界面同一画风），其余卡保留 emoji */
-    const iconHTML = (info.kind === 'building')
+    const kindLine = (info.kind === 'road') ? '道路牌 · ' + info.tiles + ' 格' : kindLabel;
+    const artHTML = (info.kind === 'building')
       ? '<img class="card-art" src="assets/buildings/' + key + '.png" alt="">'
-      : info.icon;
+      : '<div class="card-art-emoji">' + info.icon + '</div>';
+
     wrap.innerHTML =
-      '<div class="card-icon">' + iconHTML + '</div>' +
-      '<div class="card-main">' +
-        '<div class="card-name">' + info.name + '</div>' +
-        costLine +
-        '<div class="card-desc">' + (info.desc || '') + '</div>' +
-      '</div>' +
-      '<div class="card-price">' + info.price + ' ⚡</div>' +
+      '<div class="card-cost">' + info.price + '</div>' +
+      '<div class="card-art-zone">' + artHTML + '</div>' +
+      '<div class="card-nameplate"><div class="card-name">' + info.name + '</div>' +
+        '<div class="card-kind-line">' + kindLine + '</div></div>' +
+      '<div class="card-desc">' + (info.desc || '') + '</div>' +
       (info.kind === 'effect' && !isShop ? '<div class="card-tag">点击使用</div>' : '');
     return wrap;
   },
