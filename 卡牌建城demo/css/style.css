@@ -381,10 +381,10 @@ html, body {
  * 所有内部定位用百分比 —— 任何尺寸的卡（手牌 72×108 / 商店 96×144 / 政策 110×165）共用。 */
 
 .card {
-  --kind-color: #b8863b;
+  --kind-color: #3a6ea8;
   width: 72px; height: 108px; flex: 0 0 72px;
   border-radius: 6px; border: none;
-  background: #e8dcc0 url('../assets/ui/card-frame-p.png') center / 100% 100% no-repeat;
+  background: #d8cdb4 url('../assets/ui/card-frame-v2.png') center / 100% 100% no-repeat;
   box-shadow: 0 5px 14px rgba(0,0,0,.42);
   display: block;
   cursor: pointer;
@@ -392,51 +392,46 @@ html, body {
   transition: transform .14s cubic-bezier(.3,1.4,.5,1), box-shadow .12s, filter .12s;
   transform-origin: bottom center;
 }
-.card::before {   /* 类型色带：顶部横条（对齐参考图 style-ref-2 第 1 板块） */
-  content: ''; position: absolute; left: 14%; right: 14%; top: 12.5%;
-  height: 5.5%; border-radius: 3px; background: var(--kind-color);
-  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+.card-building { --kind-color: #4a7a3a; }
+.card::before {   /* 类型色带：实心横条盖住框图自带色带（同时盖掉其顶缘的 AI 残留文字） */
+  content: ''; position: absolute; left: 10%; right: 10%; top: 2.5%;
+  height: 12%; border-radius: 4px; background: var(--kind-color);
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
-.card-building { --kind-color: #7a9b3f; }
-.card-road     { --kind-color: #a3814f; }
-.card-upgrade  { --kind-color: #9a5aa8; }
-.card-effect   { --kind-color: #d8823b; }
+.card-road     { --kind-color: #8a6b3a; }
+.card-upgrade  { --kind-color: #7a5aa8; }
+.card-effect   { --kind-color: #3a8a5a; }
 .card:hover { filter: brightness(1.06); }
 
-.card-cost {   /* 费用角标（左上能量圆） */
-  position: absolute; left: 13%; top: 13.5%;
-  width: 24%; aspect-ratio: 1; border-radius: 50%;
+.card-cost {   /* 费用数字：叠在框图左下的铜色圆徽章上 */
+  position: absolute; left: 11%; top: 82%;
+  width: 16%; aspect-ratio: 1;
   display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 35% 30%, #ffe9a8, #d9a93f);
-  border: 1px solid #8a6b3a;
-  font-size: 12px; font-weight: 800; color: #5a3d1e;
-  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  font-size: 11px; font-weight: 800; color: #3a2c18;
   font-variant-numeric: tabular-nums;
 }
-.card-art-zone {   /* 立绘区 = 框图中央窗口（垫亮底：立绘像"贴在卡上的照片"，不在深底里下沉） */
-  position: absolute; left: 15%; right: 15%; top: 20.5%; bottom: 27%;
+.card-art-zone {   /* 立绘区 = 框图中央窗口（场景插画铺满，不再垫底） */
+  position: absolute; left: 9%; right: 9%; top: 17%; bottom: 43%;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(248,240,220,.92); border-radius: 4px;
-  box-shadow: inset 0 1px 3px rgba(90,61,30,.25);
+  overflow: hidden; border-radius: 3px;
 }
-.card-art-zone .card-art { width: 100%; height: 100%; object-fit: contain; }
+.card-art-zone .card-art { width: 100%; height: 100%; object-fit: cover; }
 .card-art-zone .card-art-emoji { font-size: 30px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
-.card-nameplate {   /* 名称条 = 框图底部深色带 */
-  position: absolute; left: 17%; right: 15%; bottom: 9%; height: 13.5%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  overflow: hidden;
+.card-nameplate {   /* 底部羊皮纸区：名称 + 描述常显（参考图结构） */
+  position: absolute; left: 9%; right: 9%; top: 59%; bottom: 14%;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  gap: 2px; overflow: hidden;
 }
-.card-name { font-size: 11px; font-weight: 800; color: #f0e0c0; line-height: 1.15; white-space: nowrap; }
-.card-kind-line { display: none; }   /* 类型由色带编码，名称条只放名称（两行会挤掉卡名） */
-.card-desc {   /* 描述：手牌小卡隐藏，悬停放大态显示 */
-  position: absolute; left: 14%; right: 14%; bottom: 23%;
-  display: none;
-  padding: 4px 5px; border-radius: 5px;
-  background: rgba(42,30,18,.85); color: #f0e0c0;
-  font-size: 9px; line-height: 1.35; text-align: left;
+.card-name { font-size: 10px; font-weight: 800; color: #4a3520; line-height: 1.2; white-space: nowrap; }
+.card-kind-line { display: none; }   /* 类型由色带编码 */
+.card-desc {   /* 描述：羊皮纸区常显（有空间，不再等悬停） */
+  display: block;
+  background: none; color: #6b5744;
+  font-size: 8px; line-height: 1.3; text-align: center;
+  padding: 0 2px;
 }
 .card-tag {
-  position: absolute; top: 46%; right: 3%;
+  position: absolute; top: 44%; right: 3%;
   font-size: 7px; padding: 1px 4px; border-radius: 999px;
   background: rgba(90,61,30,.78); color: #fff4e0; font-weight: 700;
 }

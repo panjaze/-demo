@@ -1576,16 +1576,16 @@ const UI = {
       wrap.dataset.hand = index;
     }
 
-    wrap.className = 'card card-' + state +
-                     (isShop ? ' card-shop' : (zone === 'pool' ? ' card-pool' : ' card-hand')) +
-                     (info.kind === 'effect' ? ' card-effect' : '');
+    wrap.className = 'card card-' + info.kind + ' card-' + state +
+                     (isShop ? ' card-shop' : (zone === 'pool' ? ' card-pool' : ' card-hand'));
 
     /* ★ 第五十一次修订：竖卡三段式 —— 费用角标（左上）/ 立绘区（大半）/ 名称条（底部）；
      *   desc 在手牌小卡隐藏、悬停放大态显示（行业惯例，见交接文档 §31） */
     const kindLabel = { building: '建筑牌', road: '道路牌', upgrade: '升级牌', effect: '效果牌' }[info.kind];
     const kindLine = (info.kind === 'road') ? '道路牌 · ' + info.tiles + ' 格' : kindLabel;
     const artHTML = (info.kind === 'building')
-      ? '<img class="card-art" src="assets/buildings/' + key + '.png" alt="">'
+      ? '<img class="card-art" src="assets/ui/art/' + key + '-scene.png" alt="" ' +
+        'onerror="this.onerror=null;this.src=\'assets/buildings/' + key + '.png\'">'   /* 无场景插画时回退建筑立绘 */
       : '<div class="card-art-emoji">' + info.icon + '</div>';
 
     wrap.innerHTML =
