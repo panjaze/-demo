@@ -3,9 +3,9 @@
 const { chromium } = require('playwright-core');
 const CHROME = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 // 窗口区在 card-frame-v3.png（裁后）中的归一化位置
-const WIN = { x1: 0.085, y1: 0.165, x2: 0.915, y2: 0.612 };
+const WIN = { x1: 0.105, y1: 0.245, x2: 0.895, y2: 0.615 };
 const SCENES = [
-  { scene: 'assets/ui/art/farm-scene.png',    out: 'cards/building-v3.png' },
+  { scene: 'assets/ui/art/farm-scene.png',    out: 'cards/building-v4.png' },
 ];
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-proxy-server'] });
@@ -13,7 +13,7 @@ const SCENES = [
   await page.goto('http://127.0.0.1:8124/index.html');
   const files = await page.evaluate(async ({ SCENES, WIN }) => {
     const frame = new Image();
-    frame.src = 'assets/ui/card-frame-v3.png';
+    frame.src = 'assets/ui/card-frame-v4.png';
     await frame.decode();
     const out = [];
     for (const s of SCENES) {
