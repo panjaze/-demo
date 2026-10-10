@@ -1,4 +1,44 @@
-/* =============================================================
+/* ---------- 顶栏（★ 第六十次修订：组件化木横幅 —— 木纹平铺底 + 盾槽/圆槽/齿轮槽装饰件，资源叠槽内） ---------- */
+#topbar {
+  flex: 0 0 56px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px 0 6px;
+  background: url('../assets/ui/topbar/topbar-wood-tile.png') repeat-x left center / auto 100%;
+  border: none;
+  pointer-events: auto;
+  position: relative;
+}
+.tb-deco { height: 100%; width: auto; display: block; }
+.s-gear { margin-left: auto; }
+.tb-clock {
+  display: flex; flex-direction: column; line-height: 1.15;
+  min-width: 84px;
+}
+.tb-clock #clock { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: #e8f0f8; }
+.tb-clock .tb-sub { font-size: 8px; color: #b8c8dc; font-variant-numeric: tabular-nums; }
+.tb-res {   /* 资源组：圆槽底座 + 图标 + 数字（叠槽内） */
+  position: relative;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 100%; padding: 0 16px;
+}
+.tb-res .s-circle { position: absolute; inset: 8% auto auto 0; height: 84%; width: auto; }
+.tb-res .res-ico, .tb-res b { position: relative; z-index: 1; }
+.tb-res .res-ico { width: 20px; height: 20px; background: none; border-radius: 0; }
+.tb-res b { font-size: 15px; font-weight: 800; color: #f0e8d8; text-shadow: 0 1px 2px rgba(0,0,0,.55); font-variant-numeric: tabular-nums; }
+
+.tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.tb-btn {
+  pointer-events: auto; font: inherit; font-weight: 700;
+  padding: 5px 12px; border-radius: 6px;
+  border: none;
+  background: url('../assets/ui/crops/btn-stone.png') center / 100% 100% no-repeat;
+  color: #f4ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.65);
+  cursor: pointer; transition: filter .12s, transform .1s;
+}
+.tb-btn-text { font-size: 11px; }
+.tb-btn-icon { width: 40px; height: 32px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.tb-btn:hover { filter: brightness(1.18); }
+.tb-btn:active { transform: scale(.96); }/* =============================================================
  * style.css —— 卡牌建城 Demo（Phase 3a）
  *
  * 视觉参考《卡牌城镇》(Cardboard Town)：蓝图风卡牌 + 网格草地地图
@@ -33,51 +73,6 @@ html, body {
 }
 
 /* ==================== 顶栏 ==================== */
-
-/* ---------- 顶栏（第六十三次修订：flex 流布局 space-between，按钮图标化） ---------- */
-#topbar {
-  flex: 0 0 56px;
-  display: flex; align-items: center; gap: 2.2%;
-  padding: 0 14px 0 10px;
-  background: url('../assets/ui/crops/topbar.png') center / 100% 100% no-repeat;
-  border: none;
-  pointer-events: auto;
-  position: relative;
-}
-#topbar::before {   /* 左端徽章：蓝盾城堡（参考图第 3 板块元素） */
-  content: ''; position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
-  width: 52px; height: 52px;
-  background: url('../assets/ui/emblem.png') center / contain no-repeat;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.5));
-}
-.tb-clock {
-  display: flex; flex-direction: column; line-height: 1.15;
-  margin-left: 50px; min-width: 88px;
-}
-.tb-clock #clock { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: #e8f0f8; }
-.tb-clock .tb-sub { font-size: 8px; color: #b8c8dc; font-variant-numeric: tabular-nums; }
-.tb-resnum {   /* 资源组：图标 + 数字（对齐背景横幅里的资源位） */
-  display: flex; align-items: center; gap: 7px;
-  font-size: 15px; font-weight: 800; color: #f0e8d8;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 2px rgba(0,0,0,.5);
-  white-space: nowrap; min-width: 84px;
-}
-.tb-resnum .res-ico { width: 22px; height: 22px; background: none; border-radius: 0; }
-
-.tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
-.tb-btn {
-  pointer-events: auto; font: inherit; font-weight: 700;
-  padding: 5px 12px; border-radius: 6px;
-  border: none;
-  background: url('../assets/ui/crops/btn-stone.png') center / 100% 100% no-repeat;
-  color: #f4ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.65);
-  cursor: pointer; transition: filter .12s, transform .1s;
-}
-.tb-btn-text { font-size: 11px; }
-.tb-btn-icon { width: 40px; height: 32px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-.tb-btn:hover { filter: brightness(1.18); }
-.tb-btn:active { transform: scale(.96); }
 
 /* ---------- 弹窗（★ 第六十三次修订：i2i 横版羊皮纸木框 panel-wide.png，替换 CSS 纯色） ---------- */
 .modal-box {

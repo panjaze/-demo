@@ -19,18 +19,20 @@
     -->
     <div id="ui">
 
-      <!-- ---------- 顶栏（背景 = 参考图裁切的木质横幅；数字叠在图内资源位上） ---------- -->
+      <!-- ---------- 顶栏（第六十次修订：组件化木横幅 —— 木纹平铺底 + 盾槽/圆槽/齿轮槽装饰件，资源叠槽内） ---------- -->
       <header id="topbar">
+        <img class="tb-deco s-shield" src="assets/ui/topbar/slot-shield.png" alt="">
         <div class="tb-clock">
           <span id="clock">15:00</span>
           <span class="tb-sub" id="tickinfo">Tick 0 / 180</span>
         </div>
 
-        <div class="tb-resnum rn-energy"><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><b id="res-energy">20</b></div>
-        <div class="tb-resnum rn-food"><img class="res-ico" src="assets/ui/icons/food.png" alt=""><b id="res-food">40</b></div>
-        <div class="tb-resnum rn-soldier"><img class="res-ico" src="assets/ui/icons/soldier.png" alt=""><b id="tag-soldiers">0 / 60</b></div>
+        <div class="tb-res"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><b id="res-energy">20</b></div>
+        <div class="tb-res"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/food.png" alt=""><b id="res-food">40</b></div>
+        <div class="tb-res"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/soldier.png" alt=""><b id="tag-soldiers">0 / 60</b></div>
 
         <button id="btn-policy" class="tb-btn tb-btn-text" title="查看/颁布政策">📜 政策</button>
+        <img class="tb-deco s-gear" src="assets/ui/topbar/slot-gear.png" alt="">
         <div class="tb-btns">
           <button id="btn-menu" class="tb-btn tb-btn-icon" title="主界面">🏠</button>
           <button id="btn-pause" class="tb-btn tb-btn-icon" title="暂停 / 继续">⏸️</button>
