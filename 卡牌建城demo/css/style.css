@@ -323,23 +323,24 @@ html, body {
 #result-overlay.hidden { display: none; }
 #result-card {
   text-align: center;
-  padding: 30px 46px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.25);
-  background: linear-gradient(165deg, #16233a, #0c1420);
-  box-shadow: 0 24px 70px rgba(0,0,0,.7);
+  padding: 34px 50px 30px;
+  border-radius: 8px;
+  border: 3px solid #6b4a2a;
+  background: #ece0c6 url('../assets/ui/panel-wide.png') center / 100% 100% no-repeat;
+  box-shadow: 0 24px 70px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,236,200,.5);
 }
-#result-icon { font-size: 56px; line-height: 1.1; }
-#result-title { font-size: 30px; font-weight: 900; margin-top: 8px; letter-spacing: 2px; }
-#result-sub { font-size: 13px; color: #9dbdd8; margin-top: 8px; }
+#result-icon { font-size: 56px; line-height: 1.1; filter: drop-shadow(0 3px 6px rgba(0,0,0,.4)); }
+#result-title { font-size: 30px; font-weight: 900; margin-top: 8px; letter-spacing: 2px; color: #3a2c18; font-family: Georgia, 'Times New Roman', serif; text-shadow: 0 1px 0 rgba(255,244,214,.9); }
+#result-sub { font-size: 13px; color: #5f4c38; margin-top: 8px; }
 #result-restart {
   font: inherit; font-size: 14px; font-weight: 700;
   margin-top: 20px; padding: 10px 30px; border-radius: 9px;
-  border: 1px solid rgba(255,255,255,.35);
-  background: rgba(255,255,255,.12); color: #e8eef8;
+  border: none;
+  background: url('../assets/ui/crops/btn-stone.png') center / 100% 100% no-repeat;
+  color: #f4ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.65);
   cursor: pointer;
 }
-#result-restart:hover { background: rgba(255,255,255,.22); }
+#result-restart:hover { filter: brightness(1.18); }
 
 /* ---------- 右下角功能角标 ---------- */
 
@@ -707,7 +708,7 @@ html, body {
 #hand-slots .card-empty {
   opacity: .3;
   box-shadow: none;
-  background: #e8dcc0 url('../assets/ui/card-frame-p.png') center / 100% 100% no-repeat;
+  background: #d8cdb4 url('../assets/ui/cards/farm-v5.png') center / 100% 100% no-repeat;
 }
 #hand-slots .card-empty:hover { transform: rotate(var(--tilt, 0deg)) translateY(var(--lift, 0px)); }
 
@@ -739,8 +740,8 @@ html, body {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 2px;
   font-size: 11px; text-align: center;
-  border-radius: 8px; border: 1px dashed #4a3a3a;
-  color: #8a6a6a; background: #1a1414;
+  border-radius: 8px; border: 2px dashed #8a6b3a;
+  color: #c9b890; background: rgba(74,53,32,.35);
   transition: all .12s;
 }
 .discard-zone span { font-size: 16px; line-height: 1; opacity: .7; }
