@@ -34,50 +34,44 @@ html, body {
 
 /* ==================== 顶栏 ==================== */
 
+/* ---------- 顶栏（第五十六次修订：背景 = 参考图裁切的木质横幅，数字叠在图内资源位） ---------- */
 #topbar {
-  flex: 0 0 44px;
-  display: flex; align-items: center; gap: 16px;
-  padding: 0 14px;
-  background: #131a27;
-  border-bottom: 1px solid #223049;
+  flex: 0 0 48px;
+  display: flex; align-items: center;
+  padding: 0;
+  background: url('../assets/ui/crops/topbar.png') center / 100% 100% no-repeat;
+  border: none;
   pointer-events: auto;
+  position: relative;
 }
-.tb-clock { display: flex; flex-direction: column; line-height: 1.1; }
-.tb-clock #clock { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.tb-clock .tb-sub { font-size: 10px; color: #6d84a3; font-variant-numeric: tabular-nums; }
-
-.tb-res { display: flex; gap: 8px; }
-.res-item {
-  display: flex; align-items: center; gap: 5px;
-  padding: 4px 12px 4px 9px; border-radius: 999px;
-  background: #1b2434; border: 1px solid #27364d;
+.tb-clock {
+  position: absolute; left: 1.6%; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; line-height: 1.15;
 }
-.res-item i { font-style: normal; font-size: 14px; }
-.res-item b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 32px; }
-.res-item em { font-style: normal; font-size: 10px; color: #6d84a3; }
-.res-energy b { color: #ffd23f; }
-.res-material b { color: #ff9f43; }
-.res-food b { color: #7ed957; }
-
-.tb-mid { display: flex; gap: 6px; }
-.tag {
-  font-size: 11px; padding: 4px 9px; border-radius: 6px;
-  background: #1b2434; border: 1px solid #27364d; color: #a9bdd8;
-  font-variant-numeric: tabular-nums; white-space: nowrap;
+.tb-clock #clock { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: #e8f0f8; }
+.tb-clock .tb-sub { font-size: 8px; color: #b8c8dc; font-variant-numeric: tabular-nums; }
+.tb-resnum {   /* 数字位：对齐背景横幅里画死的示例数字，用真实值覆盖 */
+  position: absolute; top: 50%; transform: translateY(-50%);
+  font-size: 15px; font-weight: 800; color: #f0e8d8;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0,0,0,.5);
+  white-space: nowrap;
 }
-.tag-dim { color: #5f7593; }
-.tag-castle { color: #ffd23f; border-color: #6b5a1a; }
+.rn-energy  { left: 33%; }
+.rn-food    { left: 57.5%; }
+.rn-soldier { left: 79%; font-size: 12px; }
 
-.tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.tb-btns { position: absolute; right: 1%; top: 50%; transform: translateY(-50%); display: flex; gap: 5px; align-items: center; }
 .tb-btn {
-  pointer-events: auto; font: inherit; font-size: 12px; font-weight: 700;
-  padding: 6px 13px; border-radius: 7px;
-  border: 1px solid #33507a; background: #1d2a3f; color: #cfe0f5;
+  pointer-events: auto; font: inherit; font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 6px;
+  border: 1px solid #6b5a3a; background: rgba(40,32,20,.82); color: #f0e8d0;
   cursor: pointer; transition: filter .12s, transform .1s;
+  text-shadow: 0 1px 2px rgba(0,0,0,.5);
 }
-.tb-btn:hover { filter: brightness(1.2); }
+.tb-btn:hover { filter: brightness(1.25); }
 .tb-btn:active { transform: scale(.96); }
-.tb-btn-ghost { border-color: #2a3a52; background: transparent; color: #6d84a3; }
+.tb-btn-ghost { border-color: rgba(107,90,58,.6); background: rgba(24,20,14,.6); color: #c9b890; }
 
 /* ==================== 主体 ==================== */
 
@@ -988,14 +982,11 @@ html, body {
  *   顶栏 36px · 沙盘吃满剩余空间 · 手牌栏 ~96px（卡片同缩、描述收起）· 常驻提示隐藏。
  * 常驻提示的信息在「玩法说明」里都有，手机上不丢内容。 */
 @media (max-height: 500px) {
-  #topbar { flex: 0 0 36px; gap: 8px; padding: 0 8px; }
-  #tag-phase { display: none; }              /* 面包屑在手机上没有信息价值，还挤宽度 */
-  #policy-tray, #relic-tray { display: none; } /* 状态托盘：点「政策」按钮能看到，省 ~90px 宽 */
+  #topbar { flex: 0 0 36px; }
   #btn-debug { display: none; }                /* 调参面板是开发工具，手机上无输入设备可用 */
-  #event-meter { display: none; }              /* 事件牌进度：触发时有弹窗提醒，进度条属次要信息 */
-  .res-item { flex: 0 0 auto; }
-  .res-item i, .res-item b, .res-item em { white-space: nowrap; }
-  .tb-sub { font-size: 9px; }
+  #legacy-info { display: none; }
+  .tb-sub { font-size: 8px; }
+  .tb-resnum { font-size: 12px; }
   #hint { display: none; }
   .tag { padding: 3px 6px; }
   .tb-btn { font-size: 11px; padding: 4px 9px; }

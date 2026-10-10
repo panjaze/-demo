@@ -7,6 +7,14 @@ const CARDS = [
   { name: 'effect',   x1: 0.1545, y1: 0.113, x2: 0.2650, y2: 0.413 },
   { name: 'road',     x1: 0.2895, y1: 0.113, x2: 0.3995, y2: 0.413 },
   { name: 'policy',   x1: 0.4245, y1: 0.113, x2: 0.5345, y2: 0.413 },
+  // 第 3 板块：顶栏资源条（木质横幅）
+  { name: 'topbar',   x1: 0.6850, y1: 0.118, x2: 0.9950, y2: 0.223, out: 'topbar.png' },
+  // 第 5 板块：事件弹窗（羊皮纸+木质框）
+  { name: 'panel',    x1: 0.7850, y1: 0.280, x2: 0.9900, y2: 0.550, out: 'panel.png' },
+  // 第 4 板块：按钮（开始战斗=蓝 / 取消=灰 / 确认=绿）
+  { name: 'btn-blue',  x1: 0.4550, y1: 0.326, x2: 0.5570, y2: 0.385, out: 'btn-blue.png' },
+  { name: 'btn-gray',  x1: 0.4550, y1: 0.393, x2: 0.5570, y2: 0.450, out: 'btn-gray.png' },
+  { name: 'btn-green', x1: 0.4550, y1: 0.458, x2: 0.5570, y2: 0.516, out: 'btn-green.png' },
 ];
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-proxy-server'] });
@@ -28,9 +36,9 @@ const CARDS = [
     return out;
   }, CARDS);
   const fs = require('fs');
-  if (!fs.existsSync('D:/工程/自研/卡牌建城demo/assets/ui/cards')) fs.mkdirSync('D:/工程/自研/卡牌建城demo/assets/ui/cards');
+  if (!fs.existsSync('D:/工程/自研/卡牌建城demo/assets/ui/crops')) fs.mkdirSync('D:/工程/自研/卡牌建城demo/assets/ui/crops', { recursive: true });
   for (const f of files) {
-    fs.writeFileSync('D:/工程/自研/卡牌建城demo/assets/ui/cards/' + f.name + '.png', Buffer.from(f.url.split(',')[1], 'base64'));
+    fs.writeFileSync('D:/工程/自研/卡牌建城demo/assets/ui/crops/' + (f.out || f.name + '.png'), Buffer.from(f.url.split(',')[1], 'base64'));
     console.log(f.name + ': ' + f.w + 'x' + f.h);
   }
   await browser.close();

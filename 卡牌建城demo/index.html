@@ -19,31 +19,19 @@
     -->
     <div id="ui">
 
-      <!-- ---------- 顶栏 ---------- -->
+      <!-- ---------- 顶栏（背景 = 参考图裁切的木质横幅；数字叠在图内资源位上） ---------- -->
       <header id="topbar">
         <div class="tb-clock">
           <span id="clock">15:00</span>
           <span class="tb-sub" id="tickinfo">Tick 0 / 180</span>
         </div>
 
-        <div class="tb-res">
-          <div class="res-item res-energy"><i><img class="res-ico" src="assets/ui/icons/energy.png" alt=""></i><b id="res-energy">20</b><em>能量</em></div>
-          <div class="res-item res-food"><i><img class="res-ico" src="assets/ui/icons/food.png" alt=""></i><b id="res-food">40</b><em>粮食</em></div>
-        </div>
-
-        <div class="tb-mid">
-          <span class="tag tag-castle" id="tag-castle">主城 Lv1</span>
-          <span class="tag" id="tag-slots">建筑位 0 / 10</span>
-          <span class="tag" id="tag-soldiers">士兵 0 / 60</span>
-          <span id="policy-tray" title="颁布中的政策（最多 3 条）"></span>
-          <span id="event-meter" title="事件牌进度：填满时触发一张事件牌（可提前留刷新能量）">
-            <i id="event-bar-fill"></i><b id="event-bar-label">?</b>
-          </span>
-          <button id="btn-policy" class="tb-btn tb-btn-ghost" title="查看/颁布政策">政策</button>
-        </div>
+        <div class="tb-resnum rn-energy"><b id="res-energy">20</b></div>
+        <div class="tb-resnum rn-food"><b id="res-food">40</b></div>
+        <div class="tb-resnum rn-soldier"><b id="tag-soldiers">0 / 60</b></div>
 
         <div class="tb-btns">
-          <span class="tag tag-dim" id="tag-phase">Phase 3a · 网格沙盘</span>
+          <button id="btn-policy" class="tb-btn tb-btn-ghost" title="查看/颁布政策">政策</button>
           <button id="btn-menu" class="tb-btn tb-btn-ghost" title="暂停并回到主界面">主界面</button>
           <button id="btn-pause" class="tb-btn">暂停</button>
           <button id="btn-reset" class="tb-btn">重置</button>
@@ -51,6 +39,14 @@
         </div>
       </header>
 
+      <!-- 隐藏保留：旧顶栏信息位的 id（ui.js 仍在更新；视觉信息已由顶栏横幅与沙盘标签承接） -->
+      <div id="legacy-info" style="display:none">
+        <span class="tag" id="tag-castle">主城 Lv1</span>
+        <span class="tag" id="tag-slots">建筑位 0 / 10</span>
+        <span id="policy-tray"></span>
+        <span id="event-meter"><i id="event-bar-fill"></i><b id="event-bar-label">?</b></span>
+        <span class="tag tag-dim" id="tag-phase"></span>
+      </div>
       <!-- ---------- 主体 ---------- -->
       <main id="main">
 
