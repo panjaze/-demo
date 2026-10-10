@@ -57,6 +57,9 @@ const drag = async (fromBox, toXY) => {
 
   /* 第四十二次修订：开局先进主界面 → 自动化直接跳过（否则菜单挡住所有点击） */
   await page.evaluate(() => { if (window.Menu) Menu.start(true); });
+  // ★ 第六十八次修订：补上新手引导跳过 —— §28 加了开局引导选择界面（全屏遮罩），
+  //   fulltest 写在它之前，没有这行会让所有点击超时（此前 7/34 的主因）。
+  await page.evaluate(() => { if (window.Tutorial) Tutorial.choose(false); });
   await page.waitForTimeout(1000);
 
   /* ===== S1 开局政策 ===== */
