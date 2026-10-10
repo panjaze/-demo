@@ -81,7 +81,7 @@ html, body {
 
 /* ==================== 主体 ==================== */
 
-#main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; min-height: 0; }
+#main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; min-height: 0; position: relative; }
 
 /* ---------- 沙盘 ---------- */
 
@@ -349,18 +349,22 @@ html, body {
   100% { box-shadow: 0 0 0 0 rgba(255,210,63,0), 0 4px 14px rgba(0,0,0,.45); }
 }
 
-/* ---------- 常驻手牌栏 ---------- */
+/* ---------- 手牌（第五十三次修订：无框化，对齐参考图 style-ref-2 第 6 板块） ----------
+ * 卡牌直接浮在沙盘底部（居中扇形），**没有手牌面板** —— 沙盘吃满整行，地图更大。
+ * 容器只负责定位，不拦截点击；弃牌区/hand-count 浮动在手牌两侧。 */
 
 #hand-bar {
-  flex: 0 0 auto; min-height: 190px;
+  position: absolute; left: 0; right: 0; bottom: 0;
+  z-index: 30;
   display: flex; flex-direction: column; gap: 4px;
-  padding: 6px 10px; border-radius: 12px;
-  border: 1px solid #223049; background: #101825;
-  pointer-events: auto;
+  padding: 0 0 10px;
+  background: none; border: none; box-shadow: none; border-radius: 0;
+  min-height: 0; flex: none;
+  pointer-events: none;                 /* 容器透明不拦截，卡牌自身恢复 */
 }
-.row-head { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
+.row-head { display: none; }            /* 面板标题/常驻说明已移除（玩法说明里有全量） */
 .rh-title { font-size: 13px; font-weight: 800; color: #a9bdd8; }
-.hb-count { margin-left: auto; color: #ffd23f; font-weight: 700; }
+.hb-count { position: absolute; right: 18px; top: -4px; margin: 0; color: rgba(255,244,214,.75); font-weight: 700; font-size: 11px; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
 .row-body { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 0; position: relative; }
 .card-row { display: flex; gap: 9px; flex: 0 0 auto; }
 #hand-slots { flex: 0 0 auto; }
@@ -388,10 +392,10 @@ html, body {
   transition: transform .14s cubic-bezier(.3,1.4,.5,1), box-shadow .12s, filter .12s;
   transform-origin: bottom center;
 }
-.card::before {   /* 类型色带：名称条左端竖条 */
-  content: ''; position: absolute; left: 16%; bottom: 9.5%;
-  width: 4%; height: 11%;
-  border-radius: 2px; background: var(--kind-color);
+.card::before {   /* 类型色带：顶部横条（对齐参考图 style-ref-2 第 1 板块） */
+  content: ''; position: absolute; left: 14%; right: 14%; top: 12.5%;
+  height: 5.5%; border-radius: 3px; background: var(--kind-color);
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
 }
 .card-building { --kind-color: #7a9b3f; }
 .card-road     { --kind-color: #a3814f; }
@@ -410,7 +414,7 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .card-art-zone {   /* 立绘区 = 框图中央窗口（垫亮底：立绘像"贴在卡上的照片"，不在深底里下沉） */
-  position: absolute; left: 15%; right: 15%; top: 13%; bottom: 27%;
+  position: absolute; left: 15%; right: 15%; top: 20.5%; bottom: 27%;
   display: flex; align-items: center; justify-content: center;
   background: rgba(248,240,220,.92); border-radius: 4px;
   box-shadow: inset 0 1px 3px rgba(90,61,30,.25);
@@ -644,10 +648,9 @@ html, body {
 #hand-bar .row-body {
   flex: 1 1 auto; display: flex; align-items: flex-end; gap: 8px;
   min-height: 0; position: relative;
-  padding: 0 8px 6px;
-  border-radius: 9px;
-  background: linear-gradient(#0a121c, #0d1725);
-  box-shadow: inset 0 3px 10px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.05);
+  padding: 0 20px;
+  background: none; box-shadow: none; border-radius: 0;
+  pointer-events: auto;
 }
 
 /* 手牌：卡拉满整条（格数可变），竖向排版保证信息完整，扇形微倾
@@ -1021,7 +1024,7 @@ html, body {
   .tag { padding: 3px 6px; }
   .tb-btn { font-size: 11px; padding: 4px 9px; }
   .res-item { padding: 3px 8px 3px 7px; }
-  #hand-bar { min-height: 96px; padding: 4px 8px; gap: 2px; }
+  #hand-bar { padding-bottom: 6px; }
   .rh-title { font-size: 11px; }
 }
 
