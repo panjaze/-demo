@@ -382,9 +382,10 @@ html, body {
 
 .card {
   --kind-color: #3a6ea8;
-  width: 72px; height: 108px; flex: 0 0 72px;
+  width: 80px; height: 120px; flex: 0 0 80px;
   border-radius: 6px; border: none;
-  background: #d8cdb4 url('../assets/ui/card-frame-v2.png') center / 100% 100% no-repeat;
+  /* 115% 微放大居中：裁掉生图画布四周的黑边；素材无文字，无需再裁顶 */
+  background: #d8cdb4 url('../assets/ui/card-frame-v2.png') center / 115% auto no-repeat;
   box-shadow: 0 5px 14px rgba(0,0,0,.42);
   display: block;
   cursor: pointer;
@@ -393,11 +394,6 @@ html, body {
   transform-origin: bottom center;
 }
 .card-building { --kind-color: #4a7a3a; }
-.card::before {   /* 类型色带：实心横条盖住框图自带色带（同时盖掉其顶缘的 AI 残留文字） */
-  content: ''; position: absolute; left: 10%; right: 10%; top: 2.5%;
-  height: 12%; border-radius: 4px; background: var(--kind-color);
-  box-shadow: 0 1px 3px rgba(0,0,0,.3);
-}
 .card-road     { --kind-color: #8a6b3a; }
 .card-upgrade  { --kind-color: #7a5aa8; }
 .card-effect   { --kind-color: #3a8a5a; }
