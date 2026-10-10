@@ -375,66 +375,43 @@ html, body {
   border-left: 1px solid #1e2b40; height: 100%;
 }
 
-/* ==================== 卡牌（第五十五次修订：对齐参考板 —— 简洁复古策略卡牌风） ====================
- * 木质细框 + 旧纸信息区 + 低饱和类型色带 + 插画主角。结构：类型栏 / 插画 / 标题 / 描述 / 信息栏。
- * 框与分区全部 CSS 绘制（不再用生成框图，规避 AI 文字与构图不可控）。 */
+/* ==================== 卡牌（第五十六次修订：1:1 复刻参考图） ====================
+ * 整卡图（类型色带含图标与类型名 / 场景立绘 / 空白羊皮纸区 / 费用徽章）直接从参考图裁切
+ * （assets/ui/cards/{building,effect,road,policy}.png），游戏内只叠加真实名称、描述与费用数字。
+ * 素材比例 185:282 ≈ 1:1.52，卡体尺寸按此比例。 */
 
 .card {
-  --kind-color: #5b7a9e;
-  width: 88px; height: 132px; flex: 0 0 88px;
-  border-radius: 7px;
-  border: 3px solid #6b4a2a;                 /* 木质细框 */
-  background: #ece0c6;                        /* 旧纸底 */
-  box-shadow: inset 0 0 0 1px rgba(255,236,200,.4), 0 5px 14px rgba(0,0,0,.42);
-  color: #4a3520;
+  width: 80px; height: 122px; flex: 0 0 80px;
+  border-radius: 6px;
+  background: var(--card-bg) center / 100% 100% no-repeat;
+  box-shadow: 0 5px 14px rgba(0,0,0,.42);
   display: block;
   cursor: pointer;
   position: relative;
-  overflow: hidden;                           /* 色带/信息栏贴边随圆角裁切 */
   transition: transform .14s cubic-bezier(.3,1.4,.5,1), box-shadow .12s, filter .12s;
   transform-origin: bottom center;
 }
-.card-building { --kind-color: #5b7a9e; }
-.card-road     { --kind-color: #9a7a4a; }
-.card-upgrade  { --kind-color: #7a6a9a; }
-.card-effect   { --kind-color: #5e8a5e; }
-.card:hover { filter: brightness(1.05); }
+.card-building { --card-bg: url('../assets/ui/cards/building.png'); }
+.card-effect   { --card-bg: url('../assets/ui/cards/effect.png'); }
+.card-road     { --card-bg: url('../assets/ui/cards/road.png'); }
+.card-upgrade  { --card-bg: url('../assets/ui/cards/policy.png'); }   /* 升级牌暂用政策图（蓝带），desc 说明升级语义 */
+.card:hover { filter: brightness(1.06); }
 
-.card-typeband {   /* 顶部类型栏：低饱和色带 + 类别图标 + 类型名 */
-  position: absolute; top: 0; left: 0; right: 0; height: 13%;
-  background: var(--kind-color);
-  display: flex; align-items: center; gap: 4px;
-  padding: 0 7px;
-  color: #f4ecd8; font-size: 9px; font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0,0,0,.35);
-}
-.card-typeicon { font-size: 10px; line-height: 1; }
-.card-art-zone {   /* 插画主角：占卡面大半 */
-  position: absolute; left: 4%; right: 4%; top: 15%; height: 50%;
-  border-radius: 4px; overflow: hidden;
-  background: #2a2620;
-}
-.card-art-zone .card-art { width: 100%; height: 100%; object-fit: cover; }
-.card-art-zone .card-art-emoji { font-size: 30px; }
-.card-name {   /* 标题独立成行 */
-  position: absolute; left: 4%; right: 4%; top: 67%;
-  text-align: center; font-size: 11px; font-weight: 800; color: #4a3520;
+.card-name {   /* 底部羊皮纸区：名称 */
+  position: absolute; left: 10%; right: 10%; top: 55%;
+  text-align: center; font-size: 10px; font-weight: 800; color: #4a3520;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.card-desc {   /* 描述：足够留白 */
-  position: absolute; left: 5%; right: 5%; top: 73.5%; height: 15%;
-  font-size: 7.5px; line-height: 1.25; color: #6b5744; text-align: center;
-  display: block; background: none; padding: 0;
+.card-desc {   /* 底部羊皮纸区：描述（两行留白） */
+  position: absolute; left: 12%; right: 12%; top: 64%; height: 21%;
+  font-size: 7.5px; line-height: 1.3; color: #6b5744; text-align: center;
   overflow: hidden;
 }
-.card-infobar {   /* 底部统一信息栏：资源图标 + 消耗 */
-  position: absolute; left: 0; right: 0; bottom: 0; height: 11%;
-  background: rgba(74,53,32,.14);
-  border-top: 1px solid rgba(74,53,32,.25);
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  font-size: 9px; font-weight: 700; color: #5a3d1e;
+.card-cost-num {   /* 费用数字：叠在框图左下徽章（💧 图标为素材一部分） */
+  position: absolute; left: 13%; top: 86.5%; width: 16%;
+  text-align: center; font-size: 11px; font-weight: 800; color: #e8f0f8;
+  font-variant-numeric: tabular-nums;
 }
-.res-ico { width: 12px; height: 12px; object-fit: contain; border-radius: 50%; background: rgba(255,252,240,.7); }
 .card-tag {
   position: absolute; top: 44%; right: 3%;
   font-size: 7px; padding: 1px 4px; border-radius: 999px;
@@ -732,9 +709,9 @@ html, body {
   gap: 1px; opacity: .95; transform: scale(.95);
   color: #fff;
 }
-.drag-ghost .card-typeband { height: 16%; font-size: 10px; }
-.drag-ghost .card-name { font-size: 12px; font-weight: 800; }
-.drag-ghost .card-infobar { font-size: 10px; }
+.drag-ghost .card-name { font-size: 12px; }
+
+
 .drag-ghost .card-desc { font-size: 9px; color: #cfe0f5; }
 .drag-ghost.ghost-effect { border-color: #7a9a7a; background: #3a4a3a; }
 

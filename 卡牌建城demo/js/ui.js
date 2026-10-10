@@ -1025,13 +1025,10 @@ const UI = {
       : (info.kind === 'road' ? '松手进入铺路模式'
       : (info.kind === 'upgrade' ? '拖到己方建筑升级'
       : '松手即使用'));
-    /* ★ 第五十五次修订：幻影改用新卡牌结构（类型栏 + 名称 + 信息栏） */
-    const kindLabel = { building: '建筑牌', road: '道路牌', upgrade: '升级牌', effect: '效果牌' }[info.kind];
-    const kindIcon = { building: '🏠', road: '🛤️', upgrade: '⬆️', effect: '🍃' }[info.kind];
-    ghost.innerHTML = '<div class="card-typeband"><span class="card-typeicon">' + kindIcon + '</span><span>' + kindLabel + '</span></div>' +
-                      '<div class="card-name">' + info.name + '</div>' +
-                      '<div class="card-infobar"><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><span>消耗 ' + info.price + '</span></div>' +
-                      '<div class="card-desc">' + hintLine + '</div>';
+    /* ★ 第五十六次修订：幻影 = 整卡图 + 名称 + 提示（与新卡牌结构一致） */
+    ghost.innerHTML = '<div class="card-name">' + info.name + '</div>' +
+                      '<div class="card-desc">' + hintLine + '</div>' +
+                      '<div class="card-cost-num">' + info.price + '</div>';
     document.body.appendChild(ghost);
 
     this.drag = {
@@ -1582,22 +1579,12 @@ const UI = {
     wrap.className = 'card card-' + info.kind + ' card-' + state +
                      (isShop ? ' card-shop' : (zone === 'pool' ? ' card-pool' : ' card-hand'));
 
-    /* ★ 第五十五次修订：结构对齐参考板 —— 类型栏（图标+名）/ 插画主角 / 标题独立 /
-     *   描述留白 / 底部统一信息栏（费用走资源图标，不再零散贴底） */
-    const kindLabel = { building: '建筑牌', road: '道路牌', upgrade: '升级牌', effect: '效果牌' }[info.kind];
-    const kindIcon = { building: '🏠', road: '🛤️', upgrade: '⬆️', effect: '🍃' }[info.kind];
-    const artHTML = (info.kind === 'building')
-      ? '<img class="card-art" src="assets/ui/art/' + key + '-scene.png" alt="" ' +
-        'onerror="this.onerror=null;this.src=\'assets/buildings/' + key + '.png\'">'
-      : '<div class="card-art-emoji">' + info.icon + '</div>';
-
+    /* ★ 第五十六次修订：卡面 1:1 复刻参考图 —— 整卡图（含色带/立绘/羊皮纸区/费用徽章）从参考图裁切，
+     *   游戏内只叠加真实名称、描述与费用数字（羊皮纸区空白，直接书写） */
     wrap.innerHTML =
-      '<div class="card-typeband"><span class="card-typeicon">' + kindIcon + '</span><span>' + kindLabel + '</span></div>' +
-      '<div class="card-art-zone">' + artHTML + '</div>' +
       '<div class="card-name">' + info.name + '</div>' +
       '<div class="card-desc">' + (info.desc || '') + '</div>' +
-      '<div class="card-infobar"><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><span>消耗 ' + info.price + '</span></div>' +
-      (info.kind === 'effect' && !isShop ? '<div class="card-tag">点击使用</div>' : '');
+      '<div class="card-cost-num">' + info.price + '</div>';
     return wrap;
   },
 };
