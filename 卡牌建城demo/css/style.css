@@ -369,12 +369,12 @@ html, body {
   border-left: 1px solid #1e2b40; height: 100%;
 }
 
-/* ==================== 卡牌（第五十九次修订：大气金框 v4，对齐主流卡牌华丽度） ====================
- * 框 = i2i 生成（金雕边条/银角件/深蓝垂布横幅/羊皮纸面板/铜钉费用位），已裁衬底（比例 0.593）。
- * 场景插画经 _compose_card.js 合成进窗口区。CSS 只做尺寸与文字层。 */
+/* ==================== 卡牌（第六十次修订：标准实体卡比例 0.716，宽版大气框 v5） ====================
+ * 行业标准宽高比 63:88 ≈ 0.716（万智牌/宝可梦/炉石）—— 此前的 0.593 窄卡是瘦弱感根因。
+ * 框 = i2i 宽版重生成（card-frame-v5.png），插画合成进窗口区。 */
 
 .card {
-  width: 86px; height: 145px; flex: 0 0 86px;
+  width: 100px; height: 140px; flex: 0 0 100px;
   border-radius: 8px;
   background: var(--card-bg) center / 100% 100% no-repeat;
   box-shadow: 0 6px 16px rgba(0,0,0,.5);
@@ -384,29 +384,33 @@ html, body {
   transition: transform .14s cubic-bezier(.3,1.4,.5,1), box-shadow .12s, filter .12s;
   transform-origin: bottom center;
 }
-.card-building { --card-bg: url('../assets/ui/cards/building-v4.png'); }
+.card-building { --card-bg: url('../assets/ui/cards/building-v5.png'); }
 .card-effect   { --card-bg: url('../assets/ui/cards/effect.png'); }
 .card-road     { --card-bg: url('../assets/ui/cards/road.png'); }
-.card-upgrade  { --card-bg: url('../assets/ui/cards/policy.png'); }   /* 升级牌暂用政策图 */
+.card-upgrade  { --card-bg: url('../assets/ui/cards/policy.png'); }
 .card:hover { filter: brightness(1.06); }
 
-.card-name {   /* 羊皮纸面板：标题（衬线+凹印） */
-  position: absolute; left: 10%; right: 10%; top: 67.5%;
+.card-name {   /* 信息面板：标题（衬线+凹印） */
+  position: absolute; left: 10%; right: 10%; top: 67%;
   text-align: center; font-size: 11px; font-weight: 700;
   font-family: Georgia, 'Times New Roman', serif;
   letter-spacing: 1px; color: #3a2c18;
   text-shadow: 0 1px 0 rgba(255,244,214,.9), 0 2px 3px rgba(90,61,30,.28);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.card-desc {   /* 羊皮纸面板：描述留白 */
-  position: absolute; left: 12%; right: 12%; top: 75%; height: 13%;
-  font-size: 7.5px; line-height: 1.3; color: #5f4c38; text-align: center;
+.card-desc {   /* 信息面板：描述留白 */
+  position: absolute; left: 12%; right: 12%; top: 74.5%; height: 15%;
+  font-size: 8px; line-height: 1.3; color: #5f4c38; text-align: center;
   overflow: hidden;
 }
-.card-cost-num {   /* 费用数字：叠在左下铜钉上 */
-  position: absolute; left: 11.5%; top: 88.5%; width: 13%;
-  text-align: center; font-size: 10px; font-weight: 800; color: #ffe9b0;
-  text-shadow: 0 1px 2px rgba(0,0,0,.65);
+.card-cost-num {   /* 费用角标：左下金色圆徽（CSS 绘制，v5 框无内置徽章） */
+  position: absolute; left: 7%; top: 6%;
+  width: 20%; aspect-ratio: 1; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 35% 30%, #ffe9a8, #c8922f);
+  border: 2px solid #8a6b3a;
+  font-size: 14px; font-weight: 800; color: #3a2c18;
+  box-shadow: 0 2px 5px rgba(0,0,0,.5), inset 0 1px 2px rgba(255,255,255,.5);
   font-variant-numeric: tabular-nums;
 }
 .card-tag {
