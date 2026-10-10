@@ -1,8 +1,13 @@
 /* ---------- 顶栏（★ 第六十次修订：组件化木横幅 —— 木纹平铺底 + 盾槽/圆槽/齿轮槽装饰件，资源叠槽内） ---------- */
+/* ★ 第六十五次修订：顶栏高度此前被装饰件（盾牌固有 275px）撑到 275px —— 面板写的是 flex:0 0 56px，
+ *   但 flex item 的 min-height:auto 会以内容最小高度为准，于是沙盘被压到只剩 433px。
+ *   改为「写死高度 + min-height:0 + 装饰件 height:100%」，恢复设计意图。 */
+:root { --tb-h: 64px; }
 #topbar {
-  flex: 0 0 56px;
-  display: flex; align-items: center; gap: 10px;
-  padding: 0 12px 0 6px;
+  flex: 0 0 var(--tb-h); height: var(--tb-h); min-height: 0;
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 10px 0 4px;
+  white-space: nowrap;
   background: url('../assets/ui/topbar/topbar-wood-tile.png') repeat-x left center / auto 100%;
   border: none;
   pointer-events: auto;
@@ -12,21 +17,21 @@
 .s-gear { margin-left: auto; }
 .tb-clock {
   display: flex; flex-direction: column; line-height: 1.15;
-  min-width: 84px;
+  min-width: 128px; white-space: nowrap;
 }
-.tb-clock #clock { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; color: #f0e8d8; }
-.tb-clock .tb-sub { font-size: 9px; color: #c8d4e4; font-variant-numeric: tabular-nums; }
-.tb-res {   /* 资源组：圆槽底座 + 图标 + 数字（叠槽内） */
+.tb-clock #clock { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; color: #f0e8d8; }
+.tb-clock .tb-sub { font-size: 10.5px; color: #c8d4e4; font-variant-numeric: tabular-nums; }
+.tb-res {   /* 资源组：圆槽徽章（内嵌图标） + 数字 */
   position: relative;
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-  height: 100%; padding: 0 18px;
+  display: flex; align-items: center; gap: 9px;
+  height: 100%; padding: 0 15px 0 2px; white-space: nowrap; flex: 0 0 auto;
 }
-.tb-res .s-circle { position: absolute; inset: 8% auto auto 0; height: 84%; width: auto; }
-.tb-res .res-ico, .tb-res b { position: relative; z-index: 1; }
-.tb-res .res-ico { width: 24px; height: 24px; background: none; border-radius: 0; }
-.tb-res b { font-size: 17px; font-weight: 800; color: #f4ecdc; text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
+.res-slot { position: relative; width: 46px; height: 46px; flex: 0 0 46px; display: flex; align-items: center; justify-content: center; }
+.res-slot .s-circle { position: absolute; inset: 0; width: 100%; height: 100%; }
+.res-slot .res-ico { position: relative; z-index: 1; width: 27px; height: 27px; background: none; border-radius: 0; }
+.tb-res b { white-space: nowrap; font-size: 20px; font-weight: 800; color: #f4ecdc; text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 
-.tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.tb-btns { margin-left: 8px; display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
 .tb-btn {
   pointer-events: auto; font: inherit; font-weight: 700;
   padding: 5px 12px; border-radius: 6px;
@@ -35,8 +40,11 @@
   color: #f4ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.65);
   cursor: pointer; transition: filter .12s, transform .1s;
 }
-.tb-btn-text { font-size: 11px; }
-.tb-btn-icon { width: 40px; height: 32px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.tb-btn-text { font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.tb-ico { width: 26px; height: 26px; display: block; }
+.tb-btn-icon .tb-ico { width: 27px; height: 27px; }
+.tb-btn.on { filter: brightness(1.25) saturate(1.2); box-shadow: inset 0 0 0 2px rgba(255,209,102,.9); }
+.tb-btn-icon { width: 42px; height: 34px; padding: 0; font-size: 17px; display: flex; align-items: center; justify-content: center; }
 .tb-btn:hover { filter: brightness(1.18); }
 .tb-btn:active { transform: scale(.96); }/* =============================================================
  * style.css —— 卡牌建城 Demo（Phase 3a）
@@ -74,41 +82,37 @@ html, body {
 
 /* ==================== 顶栏 ==================== */
 
-/* ---------- 弹窗（★ 第六十三次修订：i2i 横版羊皮纸木框 panel-wide.png，替换 CSS 纯色） ---------- */
+/* ---------- 弹窗（★ 第六十三次修订：i2i 横版羊皮纸木框 panel-wide.png，替换 CSS 纯色）
+ * ★ 第六十五次修订：合并此前重复三份的 .modal-head/.modal-close 规则（后者一直在覆盖前者），
+ *   并把标题/副标题改成"两行式"大字排版 —— 标题独占一行大字衬线，副标题下沉一行。 */
 .modal-box {
-  width: 740px; max-height: 470px;
+  width: 800px; height: 512px; max-height: none;
   border-radius: 6px; border: none;
-  background: url('../assets/ui/panel-wide.png') center / 100% 100% no-repeat;
+  background: url('../assets/ui/panel-wide.jpg') center / 100% 100% no-repeat;
   box-shadow: 0 18px 50px rgba(0,0,0,.6);
-  padding: 3.2% 4.5% 3% 5%;                 /* 标题落木框内的深色 header 带，正文落在羊皮纸区 */
+  padding: 5.6% 6.2% 4.4% 6.4%;             /* 内容落在羊皮纸内区（木框厚约 5.4%/8%） */
   display: flex; flex-direction: column; gap: 8px;
   position: relative;
 }
-.modal-head { display: flex; align-items: baseline; gap: 10px; }
-.modal-head .rh-title { font-size: 16px; font-weight: 800; color: #f0e8d0; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
-.modal-close {
-  position: absolute; right: 4.2%; top: 6.5%;
-  margin: 0; font: inherit; font-size: 15px; line-height: 1;
-  width: 30px; height: 30px; border-radius: 50%;
-  border: none; background: none;
-  color: #d8c8a0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+.modal-head { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.modal-head .rh-title {
+  font-size: 25px; font-weight: 800; letter-spacing: 2px; line-height: 1.15; color: #4a3520;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  text-shadow: 0 1px 0 rgba(255,250,235,.85), 0 2px 4px rgba(120,90,55,.22);
 }
-.modal-close:hover { filter: brightness(1.3); }
-.modal-body { flex: 1 1 auto; min-height: 0; }
-.modal-box .muted { color: #5f4c38; }
-#legacy-info { display: none; }
-.modal-head { display: flex; align-items: baseline; gap: 10px; }
-.modal-head .rh-title { font-size: 16px; font-weight: 800; color: #3a2c18; }
+#modal-sub { font-size: 13.5px; line-height: 1.3; letter-spacing: .5px; color: #6b5744; }
 .modal-close {
-  margin-left: auto; font: inherit; font-size: 18px; line-height: 1;
-  width: 26px; height: 26px; border-radius: 6px;
-  border: 1px solid rgba(74,53,32,.4); background: rgba(74,53,32,.12);
+  position: absolute; right: 5.2%; top: 6.2%;
+  margin: 0; font: inherit; font-size: 20px; line-height: 1;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid rgba(74,53,32,.35); background: rgba(74,53,32,.10);
   color: #4a3520; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
 .modal-close:hover { background: rgba(74,53,32,.24); }
 .modal-body { flex: 1 1 auto; min-height: 0; }
 .modal-box .muted { color: #6b5744; }
+#legacy-info { display: none; }
 
 /* ==================== 主体 ==================== */
 
@@ -136,18 +140,23 @@ html, body {
   background: linear-gradient(rgba(8,14,10,.78), rgba(8,14,10,0));
   pointer-events: none;
 }
-.bh-title { font-size: 13px; font-weight: 800; color: #dbe8d0; }
+.bh-title { font-size: 15px; font-weight: 800; color: #dbe8d0; letter-spacing: 1px; }
 .bh-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+/* ★ 第六十五次修订：小按钮同样素材化（plate-green 九宫格），替换纯色胶囊 */
 .bh-btn {
   pointer-events: auto;
-  font: inherit; font-size: 11px; font-weight: 700;
-  padding: 4px 11px; border-radius: 7px;
-  border: 1px solid rgba(255,255,255,.35);
-  background: rgba(12,20,12,.7); color: #dbe8d0;
-  cursor: pointer; transition: background .12s, border-color .12s;
+  font: inherit; font-size: 13px; font-weight: 700;
+  padding: 4px 12px; border-radius: 0; color: #f2ecdc;
+  background: none;
+  border: 9px solid transparent;
+  border-image: url('../assets/ui/buttons/plate-green.png') 16% fill stretch;
+  text-shadow: 0 1px 2px rgba(0,0,0,.75);
+  cursor: pointer; transition: filter .12s;
+  display: inline-flex; align-items: center; gap: 5px;
 }
-.bh-btn:hover { background: rgba(60,90,40,.85); border-color: rgba(255,255,255,.6); }
-.muted { font-size: 10px; color: #9db894; }
+.bh-btn:hover { filter: brightness(1.18); }
+.bh-ico { width: 17px; height: 17px; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+.muted { font-size: 12px; color: #9db894; }
 .muted b { color: #dbe8d0; }
 
 /* ==================== 资源产出明细（悬停顶栏资源弹出） ==================== */
@@ -246,7 +255,7 @@ html, body {
 /* 提示条 */
 .hint {
   position: absolute; left: 12px; bottom: 10px;
-  font-size: 11px; color: #eaf4e0;
+  font-size: 13px; color: #eaf4e0;
   padding: 5px 14px; border-radius: 999px;
   background: rgba(8,14,8,.82);
   border: 1px solid rgba(255,255,255,.18);
@@ -326,7 +335,7 @@ html, body {
   padding: 34px 50px 30px;
   border-radius: 8px;
   border: 3px solid #6b4a2a;
-  background: #ece0c6 url('../assets/ui/panel-wide.png') center / 100% 100% no-repeat;
+  background: #ece0c6 url('../assets/ui/panel-wide.jpg') center / 100% 100% no-repeat;
   box-shadow: 0 24px 70px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,236,200,.5);
 }
 #result-icon { font-size: 56px; line-height: 1.1; filter: drop-shadow(0 3px 6px rgba(0,0,0,.4)); }
@@ -372,15 +381,15 @@ html, body {
 .corner-btn[data-modal="quest"], .corner-gold { --shield: url('../assets/ui/crops/shield-blue.png'); }
 .corner-btn .ck-icon { position: relative; z-index: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
 .corner-danger.active { border-color: #ff8f8f; box-shadow: 0 0 0 2px #ff8f8f55, 0 4px 14px rgba(0,0,0,.45); }
-.ck-icon { font-size: 22px; line-height: 1; }
+.ck-icon { width: 32px; height: 32px; display: block; object-fit: contain; }
 .ck-badge {
   position: absolute; top: -6px; right: -6px;
   min-width: 22px; height: 18px; padding: 0 5px;
   border-radius: 999px; background: #ffd23f; color: #1a1400;
-  font-size: 10px; font-weight: 800; line-height: 18px;
+  font-size: 12px; font-weight: 800; line-height: 20px;
   font-variant-numeric: tabular-nums; box-shadow: 0 2px 5px rgba(0,0,0,.4);
 }
-.ck-label { font-style: normal; font-size: 10px; font-weight: 700; margin-top: 1px; }
+.ck-label { font-style: normal; font-size: 12px; font-weight: 700; margin-top: 2px; }
 .corner-btn.pulse { animation: pulse 1.6s infinite; }
 @keyframes pulse {
   0%   { box-shadow: 0 0 0 0 rgba(255,210,63,.5), 0 4px 14px rgba(0,0,0,.45); }
@@ -421,7 +430,13 @@ html, body {
 .card {
   width: 120px; height: 168px; flex: 0 0 120px;
   border-radius: 8px;
-  background: var(--card-bg) center / 100% 100% no-repeat;
+  /* ★ 第六十五次修订：拆成独立属性 —— 用 background 简写 + var() 时，只要 --card-bg 未定义
+   *   整条简写就会失效（政策/遗物/事件卡正是因此变成"空白卡"），拆开后只丢背景图。 */
+  background-color: transparent;
+  background-image: var(--card-bg);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
   box-shadow: 0 6px 16px rgba(0,0,0,.5);
   display: block;
   cursor: pointer;
@@ -430,40 +445,78 @@ html, body {
   transform-origin: bottom center;
 }
 /* ★ 卡面按卡 key 映射：建筑五张各有专属场景插画；道路/效果/升级按类型共用 */
-.card[data-key="farm"]     { --card-bg: url('../assets/ui/cards/farm-v5.png'); }
-.card[data-key="atelier"]  { --card-bg: url('../assets/ui/cards/atelier-v5.png'); }
-.card[data-key="power"]    { --card-bg: url('../assets/ui/cards/power-v5.png'); }
-.card[data-key="barracks"] { --card-bg: url('../assets/ui/cards/barracks-v5.png'); }
-.card[data-key="tower"]    { --card-bg: url('../assets/ui/cards/tower-v5.png'); }
-.card[data-key="road"], .card[data-key="dirt"], .card[data-key="stone"], .card[data-key="avenue"] { --card-bg: url('../assets/ui/cards/road-v5.png'); }
-.card[data-key="upgrade"]  { --card-bg: url('../assets/ui/cards/upgrade-v5.png'); }
+.card[data-key="farm"]     { --card-bg: url('../assets/ui/cards/farm-v5.jpg'); }
+.card[data-key="atelier"]  { --card-bg: url('../assets/ui/cards/atelier-v5.jpg'); }
+.card[data-key="power"]    { --card-bg: url('../assets/ui/cards/power-v5.jpg'); }
+.card[data-key="barracks"] { --card-bg: url('../assets/ui/cards/barracks-v5.jpg'); }
+.card[data-key="tower"]    { --card-bg: url('../assets/ui/cards/tower-v5.jpg'); }
+.card[data-key="road"], .card[data-key="dirt"], .card[data-key="stone"], .card[data-key="avenue"] { --card-bg: url('../assets/ui/cards/road-v5.jpg'); }
+.card[data-key="upgrade"]  { --card-bg: url('../assets/ui/cards/upgrade-v5.jpg'); }
 .card[data-key="harvest"], .card[data-key="muster"], .card[data-key="repair"], .card[data-key="reclaim"],
-.card[data-key="fastCrop"], .card[data-key="levy"], .card[data-key="rally"] { --card-bg: url('../assets/ui/cards/effect-v5.png'); }
+.card[data-key="fastCrop"], .card[data-key="levy"], .card[data-key="rally"] { --card-bg: url('../assets/ui/cards/effect-v5.jpg'); }
+/* ★ 第六十五次修订：政策 / 遗物 / 事件 三类三选一卡也走同一套"卡框 + 专属插画" */
+.card[data-key="policy-farm"]    { --card-bg: url('../assets/ui/cards/policy-farm-v5.jpg'); }
+.card[data-key="policy-war"]     { --card-bg: url('../assets/ui/cards/policy-war-v5.jpg'); }
+.card[data-key="policy-balance"] { --card-bg: url('../assets/ui/cards/policy-balance-v5.jpg'); }
+.card[data-key="relic-econ"]     { --card-bg: url('../assets/ui/cards/relic-econ-v5.jpg'); }
+.card[data-key="relic-war"]      { --card-bg: url('../assets/ui/cards/relic-war-v5.jpg'); }
+.card[data-key="event-bad"]      { --card-bg: url('../assets/ui/cards/event-bad-v5.jpg'); }
+.card[data-key="event-choice"]   { --card-bg: url('../assets/ui/cards/event-choice-v5.jpg'); }
+.card-back { --card-bg: url('../assets/ui/cards/back-v5.jpg'); cursor: default; }
+.card-back:hover { filter: none; }
 .card:hover { filter: brightness(1.06); }
 
-.card-name {   /* 信息面板：标题（衬线+凹印） */
-  position: absolute; left: 10%; right: 10%; top: 67%;
-  text-align: center; font-size: 11px; font-weight: 700;
-  font-family: Georgia, 'Times New Roman', serif;
-  letter-spacing: 1px; color: #3a2c18;
-  text-shadow: 0 1px 0 rgba(255,244,214,.9), 0 2px 3px rgba(90,61,30,.28);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+/* 标题带：卡面顶部蓝图带（frame 实测 y 6.6%~17.8%）—— 大字号衬线，浅金压暗影 */
+.card-name {
+  position: absolute; left: 25%; right: 5%; top: 6.6%; height: 11.2%;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 1.5px; color: #f7edd3;
+  text-shadow: 0 1px 0 rgba(0,0,0,.8), 0 2px 5px rgba(0,0,0,.65);
+  white-space: nowrap; overflow: hidden;
 }
-.card-desc {   /* 信息面板：描述留白 */
-  position: absolute; left: 12%; right: 12%; top: 74.5%; height: 15%;
-  font-size: 8px; line-height: 1.3; color: #5f4c38; text-align: center;
+/* 信息面板：描述留白（羊皮纸区 y 66%~89.4%） */
+.card-desc {
+  position: absolute; left: 11%; right: 11%; top: 67.5%; height: 21%;
+  font-size: 9.5px; line-height: 1.38; color: #4a3826; text-align: center;
   overflow: hidden;
 }
-.card-cost-num {   /* 费用角标：左下金色圆徽（CSS 绘制，v5 框无内置徽章） */
-  position: absolute; left: 7%; top: 6%;
-  width: 20%; aspect-ratio: 1; border-radius: 50%;
+.card-cost-num {   /* 费用角标：左上金属圆槽 + 金色数字 */
+  position: absolute; left: 3.5%; top: 3.8%;
+  width: 21%; aspect-ratio: 1;
+  background: url('../assets/ui/icons/gem-socket.png') center / 100% 100% no-repeat;
   display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 35% 30%, #ffe9a8, #c8922f);
-  border: 2px solid #8a6b3a;
-  font-size: 14px; font-weight: 800; color: #3a2c18;
-  box-shadow: 0 2px 5px rgba(0,0,0,.5), inset 0 1px 2px rgba(255,255,255,.5);
+  font-size: 15px; font-weight: 800; color: #ffe6a6;
+  font-family: Georgia, 'Times New Roman', serif;
+  text-shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 7px rgba(255,200,80,.55);
   font-variant-numeric: tabular-nums;
 }
+/* 品质/类型徽章（政策·遗物·事件）：同款金属圆槽，字色由 .tier-* 决定 */
+.card-badge {
+  position: absolute; left: 3.5%; top: 3.8%;
+  width: 21%; aspect-ratio: 1;
+  background: url('../assets/ui/icons/gem-socket.png') center / 100% 100% no-repeat;
+  display: flex; align-items: center; justify-content: center;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 14px; font-weight: 800; line-height: 1;
+  text-shadow: 0 1px 2px rgba(0,0,0,.95);
+}
+.card-badge.tier-0 { text-shadow: 0 1px 2px #000, 0 0 7px rgba(205,127,50,.85); }
+.card-badge.tier-1 { text-shadow: 0 1px 2px #000, 0 0 7px rgba(220,220,225,.85); }
+.card-badge.tier-2 { text-shadow: 0 1px 2px #000, 0 0 8px rgba(255,209,102,.95); }
+.card-badge.tier-bad { text-shadow: 0 1px 2px #000, 0 0 8px rgba(255,138,122,.95); }
+.card-badge.kind-relic { color: #ffd98a; text-shadow: 0 1px 2px #000, 0 0 8px rgba(255,205,90,.9); }
+/* 三选一卡（政策/遗物/事件）：羊皮纸区多一行副标题，正文相应下移放大 */
+.card-choice .card-kind-line {
+  position: absolute; left: 9%; right: 9%; top: 65.6%; height: 9.5%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 11.5px; letter-spacing: 1.8px; color: #8a6c47;
+  white-space: nowrap; overflow: hidden;
+}
+.card-choice .card-desc { top: 73.6%; height: 16%; font-size: 13px; line-height: 1.38; }
 .card-tag {
   position: absolute; top: 44%; right: 3%;
   font-size: 7px; padding: 1px 4px; border-radius: 999px;
@@ -487,7 +540,7 @@ html, body {
 .relic-chip {
   width: 34px; height: 34px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 19px; cursor: help;
+  font-size: 22px; cursor: help;
   border: 1px solid rgba(255,210,63,.6);
   background: linear-gradient(160deg, rgba(138,109,47,.85), rgba(92,71,24,.85));
   box-shadow: 0 2px 8px rgba(0,0,0,.4);
@@ -497,11 +550,11 @@ html, body {
 
 /* ===== §19 政策（第十九次修订） ===== */
 #policy-tray { display: flex; align-items: center; gap: 4px; margin-left: 6px; }
-#btn-policy { padding: 2px 8px; font-size: 12px; height: 22px; }
+#btn-policy { padding: 3px 11px; font-size: 13px; height: 26px; }
 .policy-chip {
   width: 24px; height: 24px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; cursor: help; flex: 0 0 auto;
+  font-size: 16px; cursor: help; flex: 0 0 auto;
   border: 1px solid rgba(255,255,255,.35);
   background: rgba(255,255,255,.06);
   animation: relic-pop .3s ease;
@@ -516,7 +569,7 @@ html, body {
 .tier-1 { color: #dcdce1; }
 .tier-2 { color: #ffd166; }
 .card-dim { opacity: .55; }
-#policy-hint { margin-top: 10px; text-align: center; }
+#policy-hint { margin-top: 8px; text-align: center; font-size: 13px; line-height: 1.5; }
 
 /* ===== §20 事件牌 / §21 星级任务（第二十次修订） ===== */
 .tier-bad { color: #ff8a7a; font-size: 11px; padding: 1px 5px; border-radius: 4px; margin-left: 3px;
@@ -527,14 +580,14 @@ html, body {
 .corner-gold .ck-icon { filter: drop-shadow(0 0 4px rgba(255,209,102,.5)); }
 .quest-star { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px;
               border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
-.quest-star-title { font-weight: 700; margin-bottom: 6px; letter-spacing: 1px; }
+.quest-star-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; letter-spacing: 1.5px; }
 .quest-done   { border-color: rgba(126,217,87,.5); background: rgba(126,217,87,.08); }
 .quest-done .quest-star-title { color: #7ed957; }
 .quest-active { border-color: rgba(255,209,102,.55); background: rgba(255,209,102,.07); }
 .quest-active .quest-star-title { color: #ffd166; }
 .quest-locked { opacity: .45; }
 .quest-row { display: flex; justify-content: space-between; gap: 12px;
-             padding: 3px 0; font-size: 13px; color: #cfd4dd; }
+             padding: 4px 0; font-size: 15px; color: #cfd4dd; }
 .quest-row.quest-ok { color: #7ed957; }
 .quest-row b { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 
@@ -569,11 +622,12 @@ html, body {
 }
 @keyframes quest-flash { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
 
-/* ===== 抽卡面板：竖卡 96×144，描述常显 ===== */
-#shop-cards { display: flex; gap: 10px; width: 100%; justify-content: center; }
-#shop-cards .card { width: 96px; height: 144px; flex: 0 0 96px; }
-#shop-cards .card-desc { display: block; }
-#shop-cards .card-name { font-size: 12px; }
+/* ===== 抽卡面板：竖卡 108×162，描述常显 ===== */
+#shop-cards { display: flex; gap: 12px; width: 100%; justify-content: center; }
+#shop-cards .card { width: 108px; height: 162px; flex: 0 0 108px; }
+#shop-cards .card-desc { display: block; font-size: 9.5px; }
+#shop-cards .card-name { font-size: 11.5px; letter-spacing: 1px; }
+#shop-cards .card-cost-num { font-size: 13px; }
 
 /* ===== 遗物托盘：左上角横放（杀戮尖塔同位） ===== */
 #relic-tray { left: 12px; right: auto; }
@@ -587,21 +641,23 @@ html, body {
   border: 1px solid rgba(0,0,0,.4);
 }
 
-  /** 弃牌奖励·遗物 与 政策三选一（第六十次修订：竖卡 128×192 对齐大气框，描述常显） */
+  /** 弃牌奖励·遗物 与 政策三选一、事件牌（第六十五次修订：168×236 大气卡 + 专属插画） */
 .reward-cards .card, #policy-cards .card {
-  width: 128px; height: 192px; flex: 0 0 128px;
+  width: 182px; height: 254px; flex: 0 0 182px;
 }
-.reward-cards .card-desc, #policy-cards .card-desc { display: block; font-size: 9px; }
+.reward-cards .card-name, #policy-cards .card-name { font-size: 18px; letter-spacing: 2px; }
+.reward-cards .card-desc, #policy-cards .card-desc { display: block; font-size: 13px; }
+.reward-cards .card-badge, #policy-cards .card-badge { font-size: 18px; }
 #policy-cards { align-items: center; }
 .reward-cards .card-relic:hover, #policy-cards .card:hover {
-  box-shadow: 0 14px 30px rgba(0,0,0,.55);
-  filter: brightness(1.06);
+  box-shadow: 0 18px 38px rgba(0,0,0,.6);
+  filter: brightness(1.07);
 }
 
-/** 弃牌奖励三选一 */
+/** 弃牌奖励三选一 / 政策三选一 / 事件牌共用的卡排 */
 .reward-cards {
-  display: flex; gap: 18px; justify-content: center;
-  padding: 26px 20px 30px;
+  display: flex; gap: 24px; justify-content: center;
+  padding: 10px 20px 8px;
 }
 .reward-cards .card { cursor: pointer; }
 
@@ -632,20 +688,10 @@ html, body {
   pointer-events: auto;
 }
 #modal.hidden { display: none; }
+/* ★ 第六十五次修订：此前只有 #pane-shop / #pane-pool 有 .hidden 规则，
+ *   reward / policy / quest 三个面板的 hidden 从未生效 → 打开过的面板会层层堆叠。 */
+.pane.hidden { display: none !important; }
 
-.modal-box {
-   width: 740px; height: 470px; max-height: none;
-   display: flex; flex-direction: column; gap: 8px;
-}
-.modal-head { display: flex; align-items: baseline; gap: 10px; }
-.modal-head .rh-title { font-size: 16px; font-weight: 800; color: #3a2c18; }
-.modal-close {
-  margin-left: auto; font: inherit; font-size: 18px; line-height: 1;
-  width: 26px; height: 26px; border-radius: 6px;
-  border: 1px solid rgba(74,53,32,.4); background: rgba(74,53,32,.12);
-  color: #4a3520; cursor: pointer;
-}
-.modal-close:hover { background: rgba(74,53,32,.24); }
 .modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
 #pane-shop {
   display: flex; flex-direction: column;
@@ -657,17 +703,24 @@ html, body {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
 }
 .shop-foot .btn { min-width: 220px; }
-.small { font-size: 10px; line-height: 1.35; color: #c8d8ee; text-align: center; }
+.small { font-size: 12.5px; line-height: 1.35; color: #c8d8ee; text-align: center; }
 
+/* ★ 第六十五次修订：弹窗按钮改用素材浮雕牌（border-image 九宫格，边框不随按钮拉宽而变形） */
 .btn {
-  pointer-events: auto; font: inherit; font-size: 13px; font-weight: 800;
-  padding: 9px 18px; border-radius: 7px; border: 0; cursor: pointer;
+  pointer-events: auto; font: inherit; font-size: 15px; font-weight: 800;
+  letter-spacing: 1.5px; cursor: pointer; color: #f6eeda;
+  padding: 8px 30px; border-radius: 0;
+  background: none;
+  border: 14px solid transparent;
+  border-image: url('../assets/ui/buttons/plate-gray.png') 16% fill stretch;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,.45));
   transition: filter .12s, transform .1s;
 }
-.btn-primary { background: #e8563f; color: #fff; box-shadow: 0 3px 0 #a83a28; }
-.btn-primary:hover { filter: brightness(1.1); }
-.btn-primary:active { transform: translateY(2px); box-shadow: 0 1px 0 #a83a28; }
-.btn-primary:disabled { background: #2a3a52; color: #5f7593; box-shadow: none; cursor: default; }
+.btn-primary { border-image-source: url('../assets/ui/buttons/plate-blue.png'); }
+.btn:hover { filter: brightness(1.15) drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+.btn:active { transform: translateY(2px); }
+.btn:disabled, .btn-primary:disabled { filter: grayscale(.65) brightness(.72); cursor: default; }
 
 /* 手牌托盘：卡片像搁在一个凹槽里 */
 #hand-bar .row-body {
@@ -708,7 +761,7 @@ html, body {
 #hand-slots .card-empty {
   opacity: .3;
   box-shadow: none;
-  background: #d8cdb4 url('../assets/ui/cards/farm-v5.png') center / 100% 100% no-repeat;
+  background: #d8cdb4 url('../assets/ui/cards/empty-v5.jpg') center / 100% 100% no-repeat;
 }
 #hand-slots .card-empty:hover { transform: rotate(var(--tilt, 0deg)) translateY(var(--lift, 0px)); }
 
@@ -1039,7 +1092,39 @@ html, body {
  *   顶栏 36px · 沙盘吃满剩余空间 · 手牌栏 ~96px（卡片同缩、描述收起）· 常驻提示隐藏。
  * 常驻提示的信息在「玩法说明」里都有，手机上不丢内容。 */
 @media (max-height: 500px) {
-  #topbar { flex: 0 0 36px; }
+  #topbar { --tb-h: 44px; }
+  /* ★ 第六十五次修订：矮屏（手机横屏）手牌 150×210 会盖住整张地图、并压住右下角功能角标。
+   *   按屏幕高度收紧卡面与角标，保证「地图可见 + 角标可点」。 */
+  #hand-slots .card { flex: 0 0 92px; width: 92px; height: 129px; margin-left: -30px; }
+  #hand-slots.dens-2 .card { margin-left: -38px; }
+  #hand-slots.dens-3 .card { margin-left: -46px; }
+  #hand-slots .card-name { font-size: 10px; letter-spacing: .5px; }
+  #hand-slots .card-desc { font-size: 6.5px; line-height: 1.3; }
+  #hand-slots .card-cost-num { font-size: 10px; }
+  #hand-slots .card-badge { font-size: 10px; }
+  #hand-slots .card-choice .card-kind-line { font-size: 6.5px; letter-spacing: .5px; }
+  #hand-slots .card-choice .card-desc { font-size: 6.5px; }
+  #hand-slots .card:not(.card-empty):hover { transform: rotate(0deg) translateY(-22px) scale(1.08); }
+  #corner-ui { gap: 6px; right: 8px; bottom: 6px; }
+  .corner-btn { width: 50px; height: 50px; border-radius: 8px; }
+  .ck-icon { width: 22px; height: 22px; }
+  .ck-label { font-size: 9px; }
+  .ck-badge { font-size: 9px; line-height: 15px; min-width: 15px; }
+  /* 弹窗：保持羊皮纸母版 1.5645 的宽高比（等比缩小），并保证不超出矮屏视口 */
+  .modal-box { width: min(640px, 92vw, calc(92dvh * 1.5645)); height: min(410px, 92dvh);
+               padding: 4.8% 6% 3.8% 6.4%; }
+  .modal-head .rh-title { font-size: 20px; }
+  .reward-cards .card, #policy-cards .card { width: 112px; height: 157px; flex: 0 0 112px; }
+  .reward-cards .card-name, #policy-cards .card-name { font-size: 13px; letter-spacing: 1px; }
+  .reward-cards .card-desc, #policy-cards .card-desc { font-size: 10px; }
+  .reward-cards .card-badge, #policy-cards .card-badge { font-size: 13px; }
+  .card-choice .card-kind-line { font-size: 8.5px; letter-spacing: .8px; }
+  .card-choice .card-desc { font-size: 10px; }
+  .reward-cards { gap: 14px; padding: 8px 12px 6px; }
+  #policy-hint { font-size: 11px; margin-top: 4px; }
+  #policy-hint .bh-btn { font-size: 12px; padding: 3px 9px; border-width: 8px; }
+  #policy-hint .bh-ico { width: 14px; height: 14px; }
+  .btn { font-size: 13px; padding: 6px 22px; border-width: 11px; }
   #btn-debug { display: none; }                /* 调参面板是开发工具，手机上无输入设备可用 */
   #legacy-info { display: none; }
   .tb-sub { font-size: 8px; }

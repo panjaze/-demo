@@ -495,7 +495,7 @@ const UI = {
       $('modal-sub').textContent = '翻开 5 张候选卡 · 按标价买进手牌 · 再次抽取费用会越来越贵';
     } else if (mode === 'policy' || mode === 'policyview') {
       $('modal-title').textContent = mode === 'policy' ? '政策三选一' : '已颁布的政策';
-      $('modal-sub').textContent = '品质：🟤黄铜 < ⚪白银 < 🟡黄金 · 只与主城等级挂钩';
+      $('modal-sub').textContent = '品质分 黄铜 · 白银 · 黄金 三档，只与主城等级挂钩';
       this.renderPolicyPane();
     } else if (mode === 'event') {
       $('modal-title').textContent = '事件牌';
@@ -524,11 +524,13 @@ const UI = {
       this.rewardChoices.forEach(function (k, i) {
         const rc = CFG.relics[k];
         const el = document.createElement('div');
-        el.className = 'card card-relic';
+        el.className = 'card card-choice card-relic';
+        el.dataset.key = UI.relicArtKey(rc.stat);        // ★ 卡面 = 经济/军事两组遗物插画
         el.dataset.reward = i;
-        el.innerHTML = '<div class="card-art-zone"><div class="card-art-emoji">' + rc.icon + '</div></div>' +
-          '<div class="card-nameplate"><div class="card-name">' + rc.name + '</div>' +
-          '<div class="card-kind-line">遗物 · 永久生效</div></div>' +
+        el.innerHTML =
+          '<div class="card-badge kind-relic">遗</div>' +
+          '<div class="card-name">' + rc.name + '</div>' +
+          '<div class="card-kind-line">遗物 · ' + (UI.relicArtKey(rc.stat) === 'relic-war' ? '军备' : '经营') + '</div>' +
           '<div class="card-desc">' + rc.desc + '</div>';
         host.appendChild(el);
       });
@@ -850,15 +852,14 @@ const UI = {
         : d.desc.replace('{v}', String(Math.abs(e0.vals[tier])));
       const school = CFG.policy.schools[d.school];
       const el = document.createElement('div');
-      el.className = 'card card-relic' + (pickable ? '' : ' card-dim');
+      el.className = 'card card-choice card-relic' + (pickable ? '' : ' card-dim');
+      el.dataset.key = UI.policyArtKey(d.school);      // ★ 卡面 = 该流派专属插画
       if (pickable) el.dataset.policy = String(idx);
-      /* ★ 竖卡三段式（第五十一次修订）：立绘区 = 流派徽章；名称条含品质徽章 */
+      /* ★ 第六十五次修订：与手牌卡同构 —— 蓝带放卡名、左上金属槽放品质、羊皮纸区放流派+正文 */
       el.innerHTML =
-        '<div class="card-art-zone"><div class="card-art-emoji">' + d.icon + '</div></div>' +
-        '<div class="card-nameplate"><div class="card-name">' + d.name +
-        ' <span class="tier tier-' + tier + '">' + CFG.policy.tierIcons[tier] +
-        CFG.policy.tierNames[tier] + '</span></div>' +
-        '<div class="card-kind-line">' + school.icon + ' ' + school.name + '流</div></div>' +
+        '<div class="card-badge tier-' + tier + '">' + CFG.policy.tierNames[tier].slice(-1) + '</div>' +
+        '<div class="card-name">' + d.name + '</div>' +
+        '<div class="card-kind-line">' + school.name + '流 · ' + CFG.policy.tierNames[tier] + '</div>' +
         '<div class="card-desc">' + desc + '</div>';
       return el;
     };
@@ -874,7 +875,7 @@ const UI = {
           CFG.policy.list[P.slots[0].key].name + '」'
         : '颁布后占 1 个政策槽（' + P.slots.length + '/' + CFG.policy.slotCap + '）· 选到已有政策会升级品质') +
         '　' + (left > 0
-          ? '<button class="bh-btn" data-action="policy-refresh">🔄 刷新 · ' +
+          ? '<button class="bh-btn" data-action="policy-refresh"><img class="bh-ico" src="assets/ui/icons/ic-reset.png" alt="">刷新 · ' +
             CFG.policy.refreshCost + '⚡（剩 ' + left + ' 次 · 现有 ' +
             Math.floor(Game.state.res.energy) + '⚡）</button>'
           : '<span class="muted small">本局刷新已用尽（' + CFG.policy.refreshCap + ' 次）</span>');
@@ -895,19 +896,20 @@ const UI = {
     if (!E.offer) { hint.textContent = ''; return; }
     const d = CFG.events.list[E.offer];
     const el = document.createElement('div');
-    el.className = 'card card-relic card-event';
+    el.className = 'card card-choice card-event';
+    el.dataset.key = d.kind === 'bad' ? 'event-bad' : 'event-choice';
     el.innerHTML =
-      '<div class="card-icon">' + d.icon + '</div>' +
-      '<div class="card-main"><div class="card-name">' + d.name +
-      '<span class="tier tier-bad">' + (d.kind === 'bad' ? '灾祸' : '抉择') + '</span></div>' +
-      '<div class="card-desc">' + d.desc + '</div></div>';
+      '<div class="card-badge tier-bad">' + (d.kind === 'bad' ? '灾' : '择') + '</div>' +
+      '<div class="card-name">' + d.name + '</div>' +
+      '<div class="card-kind-line">事件 · ' + (d.kind === 'bad' ? '灾祸' : '抉择') + '</div>' +
+      '<div class="card-desc">' + d.desc + '</div>';
     host.appendChild(el);
     const left = CFG.events.refreshCap - E.refreshes;
     hint.innerHTML =
       '<button class="btn btn-primary" data-action="event-claim">✔ 领取生效</button>' +
       (E.refreshes >= CFG.events.refreshCap
         ? ' <span class="muted small">刷新已用尽（' + E.refreshes + '/' + CFG.events.refreshCap + '）</span>'
-        : ' <button class="bh-btn" data-action="event-refresh">🔄 刷新 · ' +
+        : ' <button class="bh-btn" data-action="event-refresh"><img class="bh-ico" src="assets/ui/icons/ic-reset.png" alt="">刷新 · ' +
           CFG.events.refreshCost + '⚡（剩 ' + left + ' 次 · 现有 ' +
           Math.floor(Game.state.res.energy) + '⚡）</button>');
   },
@@ -1000,11 +1002,13 @@ const UI = {
     if (!E.current) { hint.textContent = '当前没有生效中的事件'; return; }
     const d = CFG.events.list[E.current];
     const el = document.createElement('div');
-    el.className = 'card card-relic card-event';
-    el.innerHTML = '<div class="card-icon">' + d.icon + '</div>' +
-      '<div class="card-main"><div class="card-name">' + d.name +
-      '<span class="tier tier-bad">生效中</span></div>' +
-      '<div class="card-desc">' + d.desc + '</div></div>';
+    el.className = 'card card-choice card-event';
+    el.dataset.key = d.kind === 'bad' ? 'event-bad' : 'event-choice';
+    el.innerHTML =
+      '<div class="card-badge tier-bad">' + (d.kind === 'bad' ? '灾' : '择') + '</div>' +
+      '<div class="card-name">' + d.name + '</div>' +
+      '<div class="card-kind-line">事件 · 生效中</div>' +
+      '<div class="card-desc">' + d.desc + '</div>';
     host.appendChild(el);
     if (!d.cost) { hint.textContent = '该事件没有化解手段，等它被下一张顶掉'; return; }
     const ok = S.res.energy >= d.cost.energy && S.res.food >= d.cost.food;
@@ -1218,7 +1222,12 @@ const UI = {
     $('tag-soldiers').textContent = '士兵 ' + Game.totalTroops('p1') + ' / ' + Game.maxTroops('p1');
     $('tag-castle').textContent = '主城 Lv' + S.castleLevel +
       (S.boost ? '　产出×' + S.boost.mul + '（' + S.boost.ticksLeft + '）' : '');
-    $('btn-pause').textContent = S.over ? '已结束' : (S.paused ? '继续' : '暂停');
+    /* ★ 第六十五次修订：暂停钮改为素材图标，状态用高亮 + tooltip 表达（与其余三枚图标按钮一致） */
+    const pb = $('btn-pause');
+    if (pb) {
+      pb.classList.toggle('on', !S.over && !!S.paused);
+      pb.title = S.over ? '本局已结束' : (S.paused ? '继续' : '暂停');
+    }
 
     // 开牌按钮的可用性会随能量变化
     const canOpen = Game.canOpen();
@@ -1259,7 +1268,12 @@ const UI = {
     $('tag-castle').textContent = '主城 Lv' + S.castleLevel +
       (S.boost ? '　产出×' + S.boost.mul + '（' + S.boost.ticksLeft + '）' : '');
 
-    $('btn-pause').textContent = S.over ? '已结束' : (S.paused ? '继续' : '暂停');
+    /* ★ 第六十五次修订：暂停钮改为素材图标，状态用高亮 + tooltip 表达（与其余三枚图标按钮一致） */
+    const pb = $('btn-pause');
+    if (pb) {
+      pb.classList.toggle('on', !S.over && !!S.paused);
+      pb.title = S.over ? '本局已结束' : (S.paused ? '继续' : '暂停');
+    }
     $('slot-count').textContent = Game.buildingsUsed();
     $('slot-max').textContent = Game.typeCap('farm') * 5;
     /* 道路额度（第四十六次修订）：铺满就得拆旧路，必须让玩家看得见 */
@@ -1558,11 +1572,22 @@ const UI = {
     $('ta-demolish').textContent = '拆除（免费）';
   },
 
+  /** 政策卡面 key：按流派取专属插画（第六十五次修订） */
+  policyArtKey(school) { return 'policy-' + (CFG.policy.schools[school] ? school : 'balance'); },
+
+  /** 遗物卡面 key：按 stat 归到「经营 / 军备」两组插画 */
+  relicArtKey(stat) {
+    const ECON = { allYield: 1, energyTick: 1, foodTick: 1, repairBonus: 1 };
+    return ECON[stat] ? 'relic-econ' : 'relic-war';
+  },
+
   makeCard(key, zone, index, isShop) {
     const wrap = document.createElement('div');
     if (!key) {
+      /* ★ 第六十五次修订：商店未翻开的卡位显示真正卡背（此前是空白框 / 或错误地显示农田卡图） */
+      if (isShop) { wrap.className = 'card card-back'; return wrap; }
       wrap.className = 'card card-empty';
-      wrap.innerHTML = '<div class="card-empty-text">' + (isShop ? '−' : '空') + '</div>';
+      wrap.innerHTML = '<div class="card-empty-text">空</div>';
       return wrap;
     }
 

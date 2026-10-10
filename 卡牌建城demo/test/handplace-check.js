@@ -100,7 +100,16 @@ function ck(name, cond, detail) {
   await clickCard(1);
   s = await state();
   const entered3 = s.placeMode === 'farm';
-  await page.mouse.move(640, 20); await page.mouse.down(); await page.mouse.up();
+  /* ★ 第六十五次修订：此处原为硬编码 (640, 20) —— 它落在顶栏的空白木纹上。
+   *   顶栏高度由装饰件撑出的 275px 修正为设计的 64px 后，该点正好压在「政策」按钮上，
+   *   点了会弹政策窗、遮住后续点击。改为取「政策钮右缘 ~ 齿轮左缘」的空白中点，随布局自适应。 */
+  const emptySpot = await page.evaluate(() => {
+    const tb = document.getElementById('topbar').getBoundingClientRect();
+    const p = document.getElementById('btn-policy').getBoundingClientRect();
+    const g = document.querySelector('.s-gear').getBoundingClientRect();
+    return { x: (p.right + g.left) / 2, y: tb.top + tb.height / 2 };
+  });
+  await page.mouse.move(emptySpot.x, emptySpot.y); await page.mouse.down(); await page.mouse.up();
   await page.waitForTimeout(320);
   s = await state();
   ck('点界面别处取消放置模式', entered3 && s.placeMode === null, '进入=' + entered3 + ' 退出后=' + s.placeMode);

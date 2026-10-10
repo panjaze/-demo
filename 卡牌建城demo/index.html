@@ -27,17 +27,17 @@
           <span class="tb-sub" id="tickinfo">Tick 0 / 180</span>
         </div>
 
-        <div class="tb-res"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><b id="res-energy">20</b></div>
-        <div class="tb-res"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/food.png" alt=""><b id="res-food">40</b></div>
-        <div class="tb-res"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/soldier.png" alt=""><b id="tag-soldiers">0 / 60</b></div>
+        <div class="tb-res"><span class="res-slot"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/energy.png" alt=""></span><b id="res-energy">20</b></div>
+        <div class="tb-res"><span class="res-slot"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/food.png" alt=""></span><b id="res-food">40</b></div>
+        <div class="tb-res"><span class="res-slot"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/soldier.png" alt=""></span><b id="tag-soldiers">0 / 60</b></div>
 
-        <button id="btn-policy" class="tb-btn tb-btn-text" title="查看/颁布政策">📜 政策</button>
+        <button id="btn-policy" class="tb-btn tb-btn-text" title="查看/颁布政策"><img class="tb-ico" src="assets/ui/icons/ic-scroll.png" alt="">政策</button>
         <img class="tb-deco s-gear" src="assets/ui/topbar/slot-gear.png" alt="">
         <div class="tb-btns">
-          <button id="btn-menu" class="tb-btn tb-btn-icon" title="主界面">🏠</button>
-          <button id="btn-pause" class="tb-btn tb-btn-icon" title="暂停 / 继续">⏸️</button>
-          <button id="btn-reset" class="tb-btn tb-btn-icon" title="重置本局">🔄</button>
-          <button id="btn-debug" class="tb-btn tb-btn-icon" title="调参面板（快捷键 `）">🎛️</button>
+          <button id="btn-menu" class="tb-btn tb-btn-icon" title="主界面"><img class="tb-ico" src="assets/ui/icons/ic-home.png" alt=""></button>
+          <button id="btn-pause" class="tb-btn tb-btn-icon" title="暂停 / 继续"><img class="tb-ico" src="assets/ui/icons/ic-pause.png" alt=""></button>
+          <button id="btn-reset" class="tb-btn tb-btn-icon" title="重置本局"><img class="tb-ico" src="assets/ui/icons/ic-reset.png" alt=""></button>
+          <button id="btn-debug" class="tb-btn tb-btn-icon" title="调参面板（快捷键 `）"><img class="tb-ico" src="assets/ui/icons/ic-tune.png" alt=""></button>
         </div>
       </header>
 
@@ -80,21 +80,21 @@
           <!-- 右下角功能角标：牌库 / 抽卡 / 弃牌 -->
           <div id="corner-ui">
             <button class="corner-btn" data-modal="pool">
-              <span class="ck-icon">📚</span>
+              <img class="ck-icon" src="assets/ui/icons/ic-deck.png" alt="">
               <b class="ck-badge" id="pool-count">0</b>
               <em class="ck-label">牌库</em>
             </button>
             <button class="corner-btn corner-primary" data-modal="shop">
-              <span class="ck-icon">🎴</span>
+              <img class="ck-icon" src="assets/ui/icons/ic-draw.png" alt="">
               <b class="ck-badge" id="shop-cost">1</b>
               <em class="ck-label">抽卡</em>
             </button>
             <button class="corner-btn corner-danger" id="btn-discard">
-              <span class="ck-icon">🗑️</span>
+              <img class="ck-icon" src="assets/ui/icons/ic-discard.png" alt="">
               <em class="ck-label">弃牌</em>
             </button>
             <button class="corner-btn corner-gold" data-modal="quest">
-              <span class="ck-icon">📋</span>
+              <img class="ck-icon" src="assets/ui/icons/ic-quest.png" alt="">
               <b class="ck-badge" id="quest-star">☆0</b>
               <em class="ck-label">任务</em>
             </button>
