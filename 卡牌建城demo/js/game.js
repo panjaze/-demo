@@ -144,7 +144,10 @@ const Game = {
 
     this.state = S;
     // 开局立刻给一次政策三选一（事件牌要从第 3 分钟才开始）
-    if (CFG.policy.startPick) this.offerPolicy('p1');
+    /* ★ 第四十五次修订：AI 也要发政策（它原来只发玩家）。
+     *   aiPickPolicy() 早就写好了，只是从来没人给 AI 发 offer —— 属于"功能写完了没接线"，
+     *   和 Engine.save / Sandbox.addMove 是同一类问题。 */
+    if (CFG.policy.startPick) { this.offerPolicy('p1'); this.offerPolicy('p2'); }
     return S;
   },
 
@@ -362,6 +365,8 @@ const Game = {
    */
   canPlaceRoadFor(side, gx, gy) {
     if (!this.canPlaceRoad(gx, gy)) return false;
+    /* 第四十五次修订：道路额度上限（用户拍板的方案 A）。预设官道不占额度。 */
+    if (this.roadBudgetLeft(side) <= 0) return false;
     const f = this.roadFrontier(side);
     for (let i = 0; i < f.length; i++) {
       if (f[i].gx === gx && f[i].gy === gy) return true;
@@ -390,9 +395,44 @@ const Game = {
     });
   },
 
-  placeRoad(gx, gy) {
+  /**
+   * 铺一格路。side = 出资方（第四十五次修订）：
+   * 记在路对象上，用来算"每方道路额度"（预设官道/桥没有 side，不计入任何一方）。
+   * ⚠️ 调用方务必传对 side —— 漏传会默认算成 p1，把 AI 的路记到玩家头上。
+   */
+  placeRoad(gx, gy, side) {
     if (!this.canPlaceRoad(gx, gy)) return false;
-    this.state.roads[this.tileKeyOf(gx, gy)] = { tier: 1 };
+    const who = side || 'p1';
+    /* ★ 第四十五次修订：这里是铺路的**唯一入口**，额度也在这里拦 ——
+     *   任何绕过它直接写 state.roads 的写法都会让额度形同虚设（AI 原本就是这么写的，已改）。 */
+    if (this.roadBudgetLeft(who) <= 0) return false;
+    this.state.roads[this.tileKeyOf(gx, gy)] = { tier: 1, side: who };
+    return true;
+  },
+
+  /** 某方**主动铺设**的道路格数（预设官道/桥带 preset 标记，不计入额度） */
+  roadCountOf(side) {
+    const R = this.state.roads, who = side || 'p1';
+    let n = 0;
+    for (const k in R) if (R[k] && R[k].side === who && !R[k].preset) n++;
+    return n;
+  },
+
+  /** 某方还能铺几格路（第四十五次修订：道路额度上限） */
+  roadBudgetLeft(side) {
+    return Math.max(0, (CFG.map.roadCapPerSide || 999) - this.roadCountOf(side || 'p1'));
+  },
+
+  /** 拆掉一格自己铺的路，释放额度（"铺拆结合"；预设官道/桥不可拆） */
+  demolishRoad(gx, gy, side) {
+    const k = this.tileKeyOf(gx, gy);
+    const r = this.state.roads[k];
+    /* ⚠️ 必须排掉 preset：预设官道/桥也带 side:'p1'（为了不让它们占额度才加的 preset 标记），
+     *   只判 side 会让玩家把桥拆掉、把地图走断。（这条是 §10e 用例抓出来的） */
+    if (!r || r.side !== (side || 'p1') || r.preset) return false;
+    delete this.state.roads[k];
+    this.log('拆除道路　(' + gx + ',' + gy + ')　道路额度 ' +
+             this.roadCountOf(side || 'p1') + '/' + (CFG.map.roadCapPerSide || '-'));
     return true;
   },
 
@@ -1038,7 +1078,7 @@ const Game = {
         })) - (self.isOfficialRoad(c.gx, c.gy) ? 0.5 : 0);
         if (d < bestD) { bestD = d; best = c; }
       });
-      if (best && self.placeRoad(best.gx, best.gy)) {
+      if (best && self.placeRoad(best.gx, best.gy, side)) {
         if (side === 'p1') self.log('物流点：自动铺设道路 1 格（' + best.gx + ',' + best.gy + '）');
       }
     });
@@ -1960,8 +2000,10 @@ const Game = {
       if (d < bestD) { bestD = d; best = { gx: p.gx, gy: p.gy }; }
     });
     if (!best) return false;
+    /* ★ 第四十五次修订：AI 也必须走 placeRoad（它原本直接写 S.roads，绕过了道路额度，
+     *   额度对 AI 形同虚设 —— 和"AI 行军不耗粮"是同一类不对称 bug）。 */
+    if (!this.placeRoad(best.gx, best.gy, 'p2')) return false;
     S.enemyRes.energy -= CFG.cards.roads.dirt.price;
-    S.roads[this.tileKeyOf(best.gx, best.gy)] = { tier: 1 };
     return true;
   },
 

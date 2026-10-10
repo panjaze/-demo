@@ -7,12 +7,18 @@ const vm = require('vm');
 const path = require('path');
 
 const base = path.join(__dirname, '..', 'js') + path.sep;
+
 const ctx = { console, Math, Object, Array, Date, JSON, Number, String, Boolean, Error };
 ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(base + 'config.js', 'utf8'), ctx);
 vm.runInContext(fs.readFileSync(base + 'game.js', 'utf8'), ctx);
 const { CFG, Game } = ctx;
+
+/* ★ 第四十五次修订：机械类用例（行军/寻路/对称性）不测道路额度，
+ *   这里把额度放宽 —— 否则贪心铺路的助手会因额度用尽而提前收工、误报失败。
+ *   额度本身在 §10e 有专门用例（那里会临时改成 5 来测）。 */
+CFG.map.roadCapPerSide = 9999;
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
@@ -179,7 +185,10 @@ const g1 = Game.applyTick();
 ok('第1个Tick 新建筑不产出（pending）', g1.food === 0, g1);
 ok('pending 已清除', Game.buildingAt(n4.gx, n4.gy).pending === false);
 const g2 = Game.applyTick();
-ok('第2个Tick 农田开始产粮 +10', g2.food === 10, g2);
+/* ★ 第四十五次修订：不再把农田产量写死，改成与 config 对齐 —— 否则每次调数值都要改测试，
+ *   而这条真正要守的是「农田确实产粮了」。 */
+const FARM_Y1 = CFG.buildings.farm.levels[0].yield.food;
+ok('第2个Tick 农田开始产粮 +' + FARM_Y1, g2.food === FARM_Y1, g2);
 
 /* ---------- 5. 主城等级 / 建筑与种类上限 ---------- */
 head('5 主城等级 / 建筑与种类上限');
@@ -472,6 +481,45 @@ ok('粮尽后停军（march 清空）', S().march.length === 0, S().march.length
 ok('★ 停军不丢兵（兵留在格上，不是凭空消失）',
    Game.totalTroops('p1') === beforeStop, { 前: beforeStop, 后: Game.totalTroops('p1') });
 
+/* ---------- 10e. 道路额度（第四十五次修订，用户拍板方案 A） ----------
+ * 规则：每方"主动铺设"的路有格数上限，预设官道/桥不占；铺满要拆旧路才能继续（铺拆结合）。 */
+head('10e 道路额度');
+Game.reset(); rich();
+const CAP0 = CFG.map.roadCapPerSide;
+CFG.map.roadCapPerSide = 5;                       // 用小额度测，省得真铺 90 格
+ok('预设官道/桥不占额度（开局额度是满的）',
+   Game.roadCountOf('p1') === 0 && Game.roadBudgetLeft('p1') === 5,
+   { 已用: Game.roadCountOf('p1'), 剩: Game.roadBudgetLeft('p1') });
+
+const capRoads = [];
+let capGuard = 0;
+while (Game.roadBudgetLeft('p1') > 0 && capGuard++ < 60) {
+  const fr = Game.roadFrontier('p1');
+  let best = null, bd = 1e9;
+  fr.forEach(function (p) {
+    const d = Math.abs(p.gx - CASTLE().gx) + Math.abs(p.gy - CASTLE().gy);
+    if (d < bd) { bd = d; best = p; }
+  });
+  if (!best) break;
+  if (!Game.placeRoad(best.gx, best.gy, 'p1')) break;
+  capRoads.push(best);
+}
+ok('额度用尽后 placeRoad 被拒绝',
+   Game.roadBudgetLeft('p1') === 0 && Game.roadCountOf('p1') === 5,
+   { 已用: Game.roadCountOf('p1'), 剩: Game.roadBudgetLeft('p1') });
+
+const lastR = capRoads[capRoads.length - 1];
+ok('拆掉一格自己的路 → 额度回到 1',
+   Game.demolishRoad(lastR.gx, lastR.gy, 'p1') === true && Game.roadBudgetLeft('p1') === 1,
+   Game.roadBudgetLeft('p1'));
+ok('拆掉后可以再铺一格（铺拆结合成立）',
+   Game.placeRoad(lastR.gx, lastR.gy, 'p1') === true && Game.roadBudgetLeft('p1') === 0);
+ok('不能拆预设官道/桥',
+   Game.demolishRoad(CFG.map.bridges[0].gx, CFG.map.bridges[0].gy, 'p1') === false);
+ok('★ 双方额度独立（AI 的路记在 p2 头上，不占玩家额度）',
+   Game.roadCountOf('p2') === 0, { p1: Game.roadCountOf('p1'), p2: Game.roadCountOf('p2') });
+CFG.map.roadCapPerSide = CAP0;
+
 /* ---------- 11. 效果牌 ---------- */
 head('11 效果牌（经济类）');
 Game.reset(); rich(); S().castleLevel = 5;
@@ -494,11 +542,13 @@ ok('每种建筑上限 +3', Game.typeCap('farm') === cap0 + CFG.cards.slotCap, G
 
 Game.reset(); rich(); S().castleLevel = 5;
 place('farm', CASTLE().gx + 1, CASTLE().gy);
-ok('每 Tick 粮食 = 10', Game.foodPerTick() === 10, Game.foodPerTick());
+ok('每 Tick 粮食 = 农田 Lv1 产量（' + FARM_Y1 + '）', Game.foodPerTick() === FARM_Y1, Game.foodPerTick());
 const fB = S().res.food;
 S().hand = [{ key: 'fastCrop' }, null, null, null, null];
 Game.playEffect(0);
-ok('抢收 = 10 × 3 = +30 🌾', S().res.food === fB + 30, S().res.food - fB);
+const FASTCROP = FARM_Y1 * CFG.cards.effects.fastCrop.burstMul;
+ok('抢收 = 农田产量 × ' + CFG.cards.effects.fastCrop.burstMul + ' = +' + FASTCROP + ' 🌾',
+   S().res.food === fB + FASTCROP, S().res.food - fB);
 
 Game.reset(); rich(); S().castleLevel = 5;
 const gEnergyBase = Game.applyTick().energy;
@@ -1119,7 +1169,7 @@ const farm017 = Game.applyTick().food;
 S().policy.p1.slots = [{ key: 'till', tier: 0 }];           // 黄铜档 +15%
 const farm117 = Game.applyTick().food;
 ok('政策「精耕·黄铜」让农田产出 +15%',
-   Math.round(farm117 - farm017) === Math.round(10 * 0.15),
+   Math.round(farm117 - farm017) === Math.round(FARM_Y1 * 0.15),
    { 前: farm017, 后: farm117 });
 
 // 效果生效：征兵（兵营间隔下降）
@@ -1239,7 +1289,7 @@ const ef0 = Game.applyTick().food;
 S().events.p1.current = 'locust';
 const ef1 = Game.applyTick().food;
 ok('事件「蝗灾」让农田产出 -30%',
-   Math.round((ef1 - ef0) / 10 * 100) === -30 || Math.abs((ef1 - ef0) - (-3)) < 0.6,
+   Math.abs((ef1 - ef0) - (-FARM_Y1 * 0.3)) < 0.6,
    { 前: ef0, 后: ef1, 差: ef1 - ef0 });
 
 // 15 条事件全部带代价：混合条有正有负，纯负条全负，没有任何纯正面
@@ -1401,7 +1451,8 @@ Game.reset(); rich();
 place('barracks', CASTLE().gx + 1, CASTLE().gy, 1);
 const fBefore = S().res.food;
 for (let i = 0; i < 21; i++) Game.trainAll(1);
-ok('无政策时训练扣粮（12）', fBefore - S().res.food === 12, fBefore - S().res.food);
+ok('无政策时训练扣粮（' + CFG.buildings.barracks.train[0].food + '）',
+   fBefore - S().res.food === CFG.buildings.barracks.train[0].food, fBefore - S().res.food);
 S().policy.p1.slots = [{ key: 'garrison2', tier: 0 }];
 const fMid = S().res.food;
 const troopsMid = Game.totalTroops('p1');

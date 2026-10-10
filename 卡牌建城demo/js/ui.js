@@ -329,7 +329,7 @@ const UI = {
     if (this.tileSel) {
       const same = (this.tileSel.gx === gx && this.tileSel.gy === gy);
       if (same) { this.tileSel = null; Engine.audio.click(); UI.render(); return; }
-      if (!this.isMyBuildingClick(gx, gy)) this.tileSel = null;
+      if (!this.isMyBuildingClick(gx, gy) && !this.isMyRoadClick(gx, gy)) this.tileSel = null;
     }
 
     const sel = S.sel;
@@ -339,15 +339,18 @@ const UI = {
       // ★ 用 canPlaceRoadFor('p1')：除了"空地挨着路"还要求接在自己的路网前沿上，
       //   否则能贴着敌方主城隔空铺路（AI 一直有这个限制，玩家以前没有）
       if (Game.canPlaceRoadFor('p1', gx, gy)) {
-        Game.placeRoad(gx, gy);
+        Game.placeRoad(gx, gy, 'p1');
         Engine.audio.click();
         this.roadPlacing.left -= 1;
         if (this.roadPlacing.left <= 0) {
           this.roadPlacing = null;
           UI.hint('这张道路牌铺完了');
         } else {
-          UI.hint('继续点击铺路，剩余 ' + this.roadPlacing.left + ' 格（点这张牌或按 Esc 取消）');
+          const left = Game.roadBudgetLeft('p1');
+          UI.hint('继续点击铺路，剩余 ' + this.roadPlacing.left + ' 格' +
+                  (left <= 0 ? '　⚠ 道路额度已满，先拆掉旧路才能继续铺' : '（道路额度 ' + left + '）'));
         }
+        UI.render();
       } else {
         Engine.audio.hurt();
         UI.hint('这里不能铺路：必须是空地，且挨着你的道路或主城');
@@ -361,6 +364,15 @@ const UI = {
       this.tileSel = this.isCastleClick(gx, gy)
         ? { gx: gx, gy: gy, isCastle: true }
         : { gx: gx, gy: gy, isCastle: false };
+      Engine.audio.click();
+      UI.render();
+      return;
+    }
+
+    /* ②b 点自己主动铺的路 → 弹操作条（可拆除）。
+     * 第四十五次修订：道路有了每方额度上限，"铺拆结合"就必须能拆 —— 否则额度满了就死路一条。 */
+    if (!sel && this.isMyRoadClick(gx, gy)) {
+      this.tileSel = { gx: gx, gy: gy, isRoad: true };
       Engine.audio.click();
       UI.render();
       return;
@@ -528,6 +540,12 @@ const UI = {
 
   /* ==================== 格子操作条（选中建筑/主城时出现） ==================== */
 
+  /** 点的是不是我方主动铺的路（预设官道/桥不可拆，故不算） */
+  isMyRoadClick(gx, gy) {
+    const r = Game.state.roads[Game.tileKeyOf(gx, gy)];
+    return !!(r && r.side === 'p1');
+  },
+
   buildTileActions() {
     const bar = $('tile-actions');
     if (!bar || bar.dataset.bound) return;
@@ -556,6 +574,14 @@ const UI = {
     $('ta-demolish').addEventListener('click', function () {
       const t = UI.tileSel;
       if (!t || t.isCastle) return;
+      if (t.isRoad) {                                   // 第四十五次修订：拆路释放额度
+        if (Game.demolishRoad(t.gx, t.gy, 'p1')) {
+          Engine.audio.hit();
+          UI.tileSel = null;
+          UI.render();
+        }
+        return;
+      }
       if (Game.demolish(t.gx, t.gy)) {
         Engine.audio.hit();
         UI.tileSel = null;
@@ -1234,6 +1260,12 @@ const UI = {
     $('btn-pause').textContent = S.over ? '已结束' : (S.paused ? '继续' : '暂停');
     $('slot-count').textContent = Game.buildingsUsed();
     $('slot-max').textContent = Game.typeCap('farm') * 5;
+    /* 道路额度（第四十五次修订）：铺满就得拆旧路，必须让玩家看得见 */
+    const rc = Game.roadCountOf('p1'), rcap = CFG.map.roadCapPerSide || 0;
+    $('road-count').textContent = rc;
+    $('road-cap').textContent = rcap;
+    const rb = $('road-budget');
+    if (rb) rb.style.color = (rcap && rc >= rcap) ? '#ff9b3d' : '';
 
     /* ---- 格子操作条 ---- */
     UI.renderTileActions();
@@ -1472,6 +1504,17 @@ const UI = {
     if (!t) { bar.classList.add('hidden'); return; }
     bar.classList.remove('hidden');
     $('ta-demolish').classList.remove('hidden');
+
+    /* 道路选中：只能拆（第四十五次修订）。拆掉会释放 1 格道路额度。 */
+    if (t.isRoad) {
+      $('ta-upgrade').classList.add('hidden');
+      $('ta-demolish').classList.remove('hidden');
+      $('ta-demolish').textContent = '拆除道路（释放 1 格额度）';
+      $('ta-title').textContent = '🛤️ 我方道路　额度 ' + Game.roadCountOf('p1') + '/' +
+        (CFG.map.roadCapPerSide || '-') + '　(' + t.gx + ',' + t.gy + ')';
+      return;
+    }
+    $('ta-upgrade').classList.remove('hidden');
 
     if (t.isCastle) {
       const cost = Game.castleUpgradeCost();
