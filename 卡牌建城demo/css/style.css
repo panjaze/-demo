@@ -14,17 +14,17 @@
   display: flex; flex-direction: column; line-height: 1.15;
   min-width: 84px;
 }
-.tb-clock #clock { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: #e8f0f8; }
-.tb-clock .tb-sub { font-size: 8px; color: #b8c8dc; font-variant-numeric: tabular-nums; }
+.tb-clock #clock { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; color: #f0e8d8; }
+.tb-clock .tb-sub { font-size: 9px; color: #c8d4e4; font-variant-numeric: tabular-nums; }
 .tb-res {   /* 资源组：圆槽底座 + 图标 + 数字（叠槽内） */
   position: relative;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  height: 100%; padding: 0 16px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  height: 100%; padding: 0 18px;
 }
 .tb-res .s-circle { position: absolute; inset: 8% auto auto 0; height: 84%; width: auto; }
 .tb-res .res-ico, .tb-res b { position: relative; z-index: 1; }
-.tb-res .res-ico { width: 20px; height: 20px; background: none; border-radius: 0; }
-.tb-res b { font-size: 15px; font-weight: 800; color: #f0e8d8; text-shadow: 0 1px 2px rgba(0,0,0,.55); font-variant-numeric: tabular-nums; }
+.tb-res .res-ico { width: 24px; height: 24px; background: none; border-radius: 0; }
+.tb-res b { font-size: 17px; font-weight: 800; color: #f4ecdc; text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 
 .tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .tb-btn {
@@ -350,21 +350,28 @@ html, body {
 }
 .corner-btn {
   font: inherit; position: relative;
-  width: 62px; height: 62px;
-  border-radius: 12px;
-  border: 2px solid rgba(255,255,255,.55);
-  background: linear-gradient(160deg, #2f5b96, #1d3c68);
+  width: 68px; height: 68px;
+  border-radius: 10px;
+  border: 1px solid rgba(201,184,144,.45);
+  background-color: #241c14;
+  background-image: var(--shield, none);
+  background-size: 74% auto;
+  background-position: center bottom 5px;
+  background-repeat: no-repeat;
   color: #fff; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  box-shadow: 0 4px 14px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.12);
+  box-shadow: 0 4px 14px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,236,200,.22);
   transition: transform .1s, filter .12s;
 }
 .corner-btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
 .corner-btn.active { border-color: #ffd23f; box-shadow: 0 0 0 2px #ffd23f55, 0 4px 14px rgba(0,0,0,.45); }
-.corner-primary { background: linear-gradient(160deg, #3d76c2, #234d85); }
-.corner-danger { background: linear-gradient(160deg, #8a3b3b, #5e2020); }
+.corner-primary { --shield: url('../assets/ui/crops/shield-gold.png'); }
+[data-modal="pool"] { --shield: url('../assets/ui/crops/shield-blue.png'); }
+.corner-danger { --shield: url('../assets/ui/crops/shield-green.png'); }
+.corner-btn[data-modal="quest"], .corner-gold { --shield: url('../assets/ui/crops/shield-blue.png'); }
+.corner-btn .ck-icon { position: relative; z-index: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
 .corner-danger.active { border-color: #ff8f8f; box-shadow: 0 0 0 2px #ff8f8f55, 0 4px 14px rgba(0,0,0,.45); }
-.ck-icon { font-size: 20px; line-height: 1; }
+.ck-icon { font-size: 22px; line-height: 1; }
 .ck-badge {
   position: absolute; top: -6px; right: -6px;
   min-width: 22px; height: 18px; padding: 0 5px;
