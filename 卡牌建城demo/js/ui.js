@@ -1020,15 +1020,18 @@ const UI = {
     const info = Game.cardInfo(key);
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost' + (info.kind === 'effect' ? ' ghost-effect' : '');
-    const costLine = (info.kind === 'building')
-      ? '<div class="card-cost">松手后点击地图放置（也支持直接拖到格子）</div>'
-      : (info.kind === 'road' ? '<div class="card-cost">松手进入铺路模式</div>'
-      : (info.kind === 'upgrade' ? '<div class="card-cost">拖到己方建筑升级</div>'
-      : '<div class="card-cost">松手即使用</div>'));
-    ghost.innerHTML = '<div class="card-icon">' + info.icon + '</div>' +
+    const hintLine = (info.kind === 'building')
+      ? '松手后点击地图放置（也支持直接拖到格子）'
+      : (info.kind === 'road' ? '松手进入铺路模式'
+      : (info.kind === 'upgrade' ? '拖到己方建筑升级'
+      : '松手即使用'));
+    /* ★ 第五十五次修订：幻影改用新卡牌结构（类型栏 + 名称 + 信息栏） */
+    const kindLabel = { building: '建筑牌', road: '道路牌', upgrade: '升级牌', effect: '效果牌' }[info.kind];
+    const kindIcon = { building: '🏠', road: '🛤️', upgrade: '⬆️', effect: '🍃' }[info.kind];
+    ghost.innerHTML = '<div class="card-typeband"><span class="card-typeicon">' + kindIcon + '</span><span>' + kindLabel + '</span></div>' +
                       '<div class="card-name">' + info.name + '</div>' +
-                      '<div class="card-price">' + info.price + ' ⚡</div>' +
-                      costLine;
+                      '<div class="card-infobar"><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><span>消耗 ' + info.price + '</span></div>' +
+                      '<div class="card-desc">' + hintLine + '</div>';
     document.body.appendChild(ghost);
 
     this.drag = {
@@ -1579,21 +1582,21 @@ const UI = {
     wrap.className = 'card card-' + info.kind + ' card-' + state +
                      (isShop ? ' card-shop' : (zone === 'pool' ? ' card-pool' : ' card-hand'));
 
-    /* ★ 第五十一次修订：竖卡三段式 —— 费用角标（左上）/ 立绘区（大半）/ 名称条（底部）；
-     *   desc 在手牌小卡隐藏、悬停放大态显示（行业惯例，见交接文档 §31） */
+    /* ★ 第五十五次修订：结构对齐参考板 —— 类型栏（图标+名）/ 插画主角 / 标题独立 /
+     *   描述留白 / 底部统一信息栏（费用走资源图标，不再零散贴底） */
     const kindLabel = { building: '建筑牌', road: '道路牌', upgrade: '升级牌', effect: '效果牌' }[info.kind];
-    const kindLine = (info.kind === 'road') ? '道路牌 · ' + info.tiles + ' 格' : kindLabel;
+    const kindIcon = { building: '🏠', road: '🛤️', upgrade: '⬆️', effect: '🍃' }[info.kind];
     const artHTML = (info.kind === 'building')
       ? '<img class="card-art" src="assets/ui/art/' + key + '-scene.png" alt="" ' +
-        'onerror="this.onerror=null;this.src=\'assets/buildings/' + key + '.png\'">'   /* 无场景插画时回退建筑立绘 */
+        'onerror="this.onerror=null;this.src=\'assets/buildings/' + key + '.png\'">'
       : '<div class="card-art-emoji">' + info.icon + '</div>';
 
     wrap.innerHTML =
-      '<div class="card-cost">' + info.price + '</div>' +
+      '<div class="card-typeband"><span class="card-typeicon">' + kindIcon + '</span><span>' + kindLabel + '</span></div>' +
       '<div class="card-art-zone">' + artHTML + '</div>' +
-      '<div class="card-nameplate"><div class="card-name">' + info.name + '</div>' +
-        '<div class="card-kind-line">' + kindLine + '</div></div>' +
+      '<div class="card-name">' + info.name + '</div>' +
       '<div class="card-desc">' + (info.desc || '') + '</div>' +
+      '<div class="card-infobar"><img class="res-ico" src="assets/ui/icons/energy.png" alt=""><span>消耗 ' + info.price + '</span></div>' +
       (info.kind === 'effect' && !isShop ? '<div class="card-tag">点击使用</div>' : '');
     return wrap;
   },

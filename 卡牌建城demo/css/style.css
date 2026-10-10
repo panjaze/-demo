@@ -375,57 +375,66 @@ html, body {
   border-left: 1px solid #1e2b40; height: 100%;
 }
 
-/* ==================== 卡牌（第五十一次修订：竖卡三段式，手绘框） ====================
- * 结构（行业惯例，参照杀戮尖塔/炉石）：费用角标（左上）→ 立绘区（框图中央窗口）→
- * 底部名称条（类型色编码）→ desc 手牌小卡隐藏、悬停放大态显示。
- * 所有内部定位用百分比 —— 任何尺寸的卡（手牌 72×108 / 商店 96×144 / 政策 110×165）共用。 */
+/* ==================== 卡牌（第五十五次修订：对齐参考板 —— 简洁复古策略卡牌风） ====================
+ * 木质细框 + 旧纸信息区 + 低饱和类型色带 + 插画主角。结构：类型栏 / 插画 / 标题 / 描述 / 信息栏。
+ * 框与分区全部 CSS 绘制（不再用生成框图，规避 AI 文字与构图不可控）。 */
 
 .card {
-  --kind-color: #3a6ea8;
-  width: 80px; height: 120px; flex: 0 0 80px;
-  border-radius: 6px; border: none;
-  /* 115% 微放大居中：裁掉生图画布四周的黑边；素材无文字，无需再裁顶 */
-  background: #d8cdb4 url('../assets/ui/card-frame-v2.png') center / 115% auto no-repeat;
-  box-shadow: 0 5px 14px rgba(0,0,0,.42);
+  --kind-color: #5b7a9e;
+  width: 88px; height: 132px; flex: 0 0 88px;
+  border-radius: 7px;
+  border: 3px solid #6b4a2a;                 /* 木质细框 */
+  background: #ece0c6;                        /* 旧纸底 */
+  box-shadow: inset 0 0 0 1px rgba(255,236,200,.4), 0 5px 14px rgba(0,0,0,.42);
+  color: #4a3520;
   display: block;
   cursor: pointer;
   position: relative;
+  overflow: hidden;                           /* 色带/信息栏贴边随圆角裁切 */
   transition: transform .14s cubic-bezier(.3,1.4,.5,1), box-shadow .12s, filter .12s;
   transform-origin: bottom center;
 }
-.card-building { --kind-color: #4a7a3a; }
-.card-road     { --kind-color: #8a6b3a; }
-.card-upgrade  { --kind-color: #7a5aa8; }
-.card-effect   { --kind-color: #3a8a5a; }
-.card:hover { filter: brightness(1.06); }
+.card-building { --kind-color: #5b7a9e; }
+.card-road     { --kind-color: #9a7a4a; }
+.card-upgrade  { --kind-color: #7a6a9a; }
+.card-effect   { --kind-color: #5e8a5e; }
+.card:hover { filter: brightness(1.05); }
 
-.card-cost {   /* 费用数字：叠在框图左下的铜色圆徽章上 */
-  position: absolute; left: 11%; top: 82%;
-  width: 16%; aspect-ratio: 1;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800; color: #3a2c18;
-  font-variant-numeric: tabular-nums;
+.card-typeband {   /* 顶部类型栏：低饱和色带 + 类别图标 + 类型名 */
+  position: absolute; top: 0; left: 0; right: 0; height: 13%;
+  background: var(--kind-color);
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 7px;
+  color: #f4ecd8; font-size: 9px; font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
 }
-.card-art-zone {   /* 立绘区 = 框图中央窗口（场景插画铺满，不再垫底） */
-  position: absolute; left: 9%; right: 9%; top: 17%; bottom: 43%;
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden; border-radius: 3px;
+.card-typeicon { font-size: 10px; line-height: 1; }
+.card-art-zone {   /* 插画主角：占卡面大半 */
+  position: absolute; left: 4%; right: 4%; top: 15%; height: 50%;
+  border-radius: 4px; overflow: hidden;
+  background: #2a2620;
 }
 .card-art-zone .card-art { width: 100%; height: 100%; object-fit: cover; }
-.card-art-zone .card-art-emoji { font-size: 30px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
-.card-nameplate {   /* 底部羊皮纸区：名称 + 描述常显（参考图结构） */
-  position: absolute; left: 9%; right: 9%; top: 59%; bottom: 14%;
-  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-  gap: 2px; overflow: hidden;
+.card-art-zone .card-art-emoji { font-size: 30px; }
+.card-name {   /* 标题独立成行 */
+  position: absolute; left: 4%; right: 4%; top: 67%;
+  text-align: center; font-size: 11px; font-weight: 800; color: #4a3520;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.card-name { font-size: 10px; font-weight: 800; color: #4a3520; line-height: 1.2; white-space: nowrap; }
-.card-kind-line { display: none; }   /* 类型由色带编码 */
-.card-desc {   /* 描述：羊皮纸区常显（有空间，不再等悬停） */
-  display: block;
-  background: none; color: #6b5744;
-  font-size: 8px; line-height: 1.3; text-align: center;
-  padding: 0 2px;
+.card-desc {   /* 描述：足够留白 */
+  position: absolute; left: 5%; right: 5%; top: 74%; height: 14.5%;
+  font-size: 8px; line-height: 1.3; color: #6b5744; text-align: center;
+  display: block; background: none; padding: 0;
+  overflow: hidden;
 }
+.card-infobar {   /* 底部统一信息栏：资源图标 + 消耗 */
+  position: absolute; left: 0; right: 0; bottom: 0; height: 11%;
+  background: rgba(74,53,32,.14);
+  border-top: 1px solid rgba(74,53,32,.25);
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-size: 9px; font-weight: 700; color: #5a3d1e;
+}
+.res-ico { width: 12px; height: 12px; object-fit: contain; border-radius: 50%; background: rgba(255,252,240,.7); }
 .card-tag {
   position: absolute; top: 44%; right: 3%;
   font-size: 7px; padding: 1px 4px; border-radius: 999px;
@@ -723,12 +732,11 @@ html, body {
   gap: 1px; opacity: .95; transform: scale(.95);
   color: #fff;
 }
-.drag-ghost .card-icon { font-size: 19px; }
+.drag-ghost .card-typeband { height: 16%; font-size: 10px; }
 .drag-ghost .card-name { font-size: 12px; font-weight: 800; }
-.drag-ghost .card-price { position: static; font-size: 11px; }
-.drag-ghost .card-cost { font-size: 9px; color: #cfe0f5; }
-.drag-ghost.ghost-effect { border-color: #b39ddb; background: linear-gradient(160deg, #4b3d86, #2c2456); }
-.drag-ghost.ghost-effect .card-cost { color: #d5c8f5; font-weight: 700; }
+.drag-ghost .card-infobar { font-size: 10px; }
+.drag-ghost .card-desc { font-size: 9px; color: #cfe0f5; }
+.drag-ghost.ghost-effect { border-color: #7a9a7a; background: #3a4a3a; }
 
 /* ==================== 调试面板 ==================== */
 
