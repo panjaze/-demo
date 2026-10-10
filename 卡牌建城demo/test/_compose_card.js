@@ -15,9 +15,6 @@ const SCENES = [
     const frame = new Image();
     frame.src = 'assets/ui/card-frame-v3.png';
     await frame.decode();
-    const orn = new Image();                    // 角花（深底金花，screen 混合融入木框）
-    orn.src = 'assets/ui/ornament-raw.png';
-    await orn.decode();
     const out = [];
     for (const s of SCENES) {
       const art = new Image();
@@ -36,21 +33,6 @@ const SCENES = [
       g.beginPath(); g.rect(wx, wy, ww, wh); g.clip();
       g.drawImage(art, wx + (ww - aw) / 2, wy + (wh - ah) / 2, aw, ah);
       g.restore();
-      // ★ 内衬描边：窗口双线（外深内金）—— 精修 B
-      g.strokeStyle = 'rgba(30,22,14,.9)'; g.lineWidth = Math.max(2, cv.width * 0.008);
-      g.strokeRect(wx, wy, ww, wh);
-      g.strokeStyle = 'rgba(217,169,63,.8)'; g.lineWidth = Math.max(1, cv.width * 0.003);
-      g.strokeRect(wx + cv.width * 0.007, wy + cv.width * 0.007, ww - cv.width * 0.014, wh - cv.width * 0.014);
-      // ★ 四角角花：screen 混合（深底融进木框，金花叠加），源为左上角花旋转四角
-      const osize = cv.width * 0.30;
-      g.globalCompositeOperation = 'screen';
-      [[0, 0, 0], [cv.width, 0, Math.PI / 2], [cv.width, cv.height, Math.PI], [0, cv.height, -Math.PI / 2]]
-        .forEach(function (cn) {
-          g.save(); g.translate(cn[0], cn[1]); g.rotate(cn[2]);
-          g.drawImage(orn, 0, 0, osize, osize);
-          g.restore();
-        });
-      g.globalCompositeOperation = 'source-over';
       out.push({ name: s.out, url: cv.toDataURL('image/png') });
     }
     return out;
