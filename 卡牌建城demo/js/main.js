@@ -170,6 +170,11 @@ function boot() {
      * （offerPolicy 在发牌时就直接把 modal DOM 顶出来了，光清数据没用）。 */
     if (Game.state.policy) Game.state.policy.p1.offer = null;
     if (global.UI && UI.setModal) UI.setModal(null);
+    /* ★ ?tut=1..6：直接进入新手引导第 N 步（无头截图 / 回归测试用，见 tutorial.js）。
+     * ⚠️ 测试入口不弹「选择界面」—— 它的全屏遮罩会挡住 handplace 等模拟点击
+     *   （实测 11 项挂 1 项）；真实玩家的入口是主菜单「开始游戏」→ menu.js start()。 */
+    const tm = global.location.href.match(/[?&#]tut=(\d)/);
+    if (tm && global.Tutorial) global.Tutorial.begin(parseInt(tm[1], 10));
   } else {
     Game.state.paused = true;
     Menu.show();

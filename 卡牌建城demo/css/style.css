@@ -1116,3 +1116,61 @@ html, body {
 @media (orientation: portrait) and (max-width: 820px) {
   #rotate-hint { display: flex; }
 }
+
+/* ==================== 新手引导（第四十八次修订） ====================
+ * 选择界面（#tut-choice）：新对局开始时弹，查看引导 / 跳过。
+ * 软引导层（#tutorial）：手指 + 气泡 + 高亮环，**容器不拦截点击**（pointer-events:none），
+ * 只有跳过按钮和气泡可点 —— 玩家仍可自由操作（配合暂停，不怕乱点）。 */
+
+#tut-choice.hidden, #tutorial.hidden, #tut-bubble.hidden,
+#tut-finger.hidden, #tut-next.hidden { display: none; }
+
+#tut-choice {
+  position: fixed; inset: 0; z-index: 9998;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(4,8,14,.74);
+}
+.tc-box {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 30px 42px; border-radius: 14px;
+  background: #101825; border: 1px solid #2a3a55;
+  box-shadow: 0 18px 60px rgba(0,0,0,.6);
+  text-align: center; max-width: 440px;
+}
+.tc-title { font-size: 22px; font-weight: 800; color: #ffd23f; }
+.tc-sub { font-size: 13px; color: #9dbdd8; line-height: 1.8; }
+.tc-accept { font-size: 14px; padding: 10px 26px; }
+
+#tutorial { position: fixed; inset: 0; z-index: 9997; pointer-events: none; }
+#tut-bubble {
+  position: absolute; width: 280px;
+  padding: 12px 14px; border-radius: 10px;
+  background: #101825; border: 1px solid #3a5a8a;
+  box-shadow: 0 10px 30px rgba(0,0,0,.55);
+  color: #dce8f8; font-size: 13px; line-height: 1.7;
+  pointer-events: auto;
+}
+#tut-bubble b { color: #ffd23f; }
+#tut-text { text-align: left; }
+#tut-next { margin-top: 8px; width: 100%; }
+#tut-finger {
+  position: absolute; font-size: 34px; pointer-events: none;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,.6));
+  animation: tut-float 1.2s ease-in-out infinite;
+}
+@keyframes tut-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+#tut-skip-run { position: absolute; top: 10px; right: 10px; pointer-events: auto; font-size: 11px; padding: 5px 10px; }
+
+.tut-highlight {
+  outline: 3px solid rgba(255,210,63,.95) !important;
+  outline-offset: 2px;
+  border-radius: 6px;
+  animation: tut-glow 1.2s ease-in-out infinite;
+}
+@keyframes tut-glow {
+  0%, 100% { outline-color: rgba(255,210,63,.95); }
+  50%      { outline-color: rgba(255,210,63,.30); }
+}

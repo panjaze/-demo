@@ -110,6 +110,9 @@ const Menu = {
     if (!S || S.over || fresh || S.t <= 0) {
       global.Game.reset();                     // reset 会重建 state 对象
       global.Game.state.paused = false;
+      /* ★ 第四十八次修订：新局弹「新手引导选择界面」（查看引导 / 跳过）——
+       *   Tutorial.ask 内部会先暂停，玩家选择后要么进引导、要么恢复运行。 */
+      if (global.Tutorial) global.Tutorial.ask();
     } else {
       S.paused = false;
     }

@@ -24,6 +24,8 @@ function ck(name, cond, detail) {
   await page.waitForTimeout(2500);
   await page.evaluate(() => {
     if (window.Menu) Menu.start(true);          // 第四十二次修订：跳过主界面
+    /* 第四十八次修订：新局会弹「新手引导选择界面」，全屏遮罩会挡住后续模拟点击 —— 选"跳过"关掉 */
+    if (window.Tutorial) Tutorial.choose(false);
     Game.state.policy.p1.offer = null; Game.state.events.p1.offer = null;
     Game.state.questClaiming = false; if (UI.setModal) UI.setModal(null); UI.render();
   });

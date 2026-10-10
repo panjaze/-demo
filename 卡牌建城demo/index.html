@@ -217,6 +217,25 @@
   <div class="rh-text">请将手机<b>横过来</b>游玩<br><span>本作为横屏设计 · 1v1 沙盘战场需要横向空间</span></div>
 </div>
 
+<!-- 新手引导（第四十八次修订）：开局选择界面 + 软引导层（手指/气泡/跳过）。
+     逻辑在 js/tutorial.js；由 menu.js start() 的新局分支触发 -->
+<div id="tut-choice" class="hidden">
+  <div class="tc-box">
+    <div class="tc-title">第一次玩？</div>
+    <div class="tc-sub">6 步教你完成开局（抽卡 → 建城 → 出兵），大约 1 分钟。<br>引导期间游戏暂停，随时可以跳过。</div>
+    <button id="tut-accept" class="tb-btn tc-accept">查看新手引导</button>
+    <button id="tut-skip" class="tb-btn tb-btn-ghost">跳过，直接开始</button>
+  </div>
+</div>
+<div id="tutorial" class="hidden">
+  <div id="tut-bubble" class="hidden">
+    <div id="tut-text"></div>
+    <button id="tut-next" class="tb-btn hidden">下一步</button>
+  </div>
+  <div id="tut-finger" class="hidden">👆</div>
+  <button id="tut-skip-run" class="tb-btn tb-btn-ghost">跳过引导 »</button>
+</div>
+
 <!-- 顺序不能改：engine -> config -> game -> sandbox -> ui -> menu -> main -->
 <script src="js/engine.js"></script>
 <script src="js/config.js"></script>
@@ -224,6 +243,7 @@
 <script src="js/sandbox.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/menu.js"></script>
+<script src="js/tutorial.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
