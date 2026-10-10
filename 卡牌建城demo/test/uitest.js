@@ -311,21 +311,31 @@ if (upT) {
   ok('升级牌流程不抛异常', true);
 }
 
-/* ==================== 9 弃牌模式点卡（各卡种，StS 式） ==================== */
-console.log('\n== 9 弃牌模式点卡 ==');
+/* ==================== 9 弃牌模式拖到弃牌堆（各卡种，不限张数） ==================== */
+console.log('\n== 9 拖到弃牌堆 ==');
 Game.reset();
 S().hand = [{ key: 'farm' }, { key: 'dirt' }, { key: 'upgrade' }, { key: 'harvest' }, { key: 'repair' }];
 const kinds = ['farm', 'dirt', 'upgrade', 'harvest', 'repair'];
 let discarded = 0;
 UI.setDiscardMode(true);
 kinds.forEach(function (k, i) {
-  // 弃牌模式：点手牌即弃（与实机同一条路径，不再走拖拽落区）
-  UI.onHandCardClick(i);
+  // 弃牌模式：拖到右下角弃牌堆 = 弃掉；模式不自动退出（不限张数）
+  document.elementFromPoint = function () { return store['btn-discard']; };
+  UI.startDrag(i, k, 500, 600);
+  UI.endDrag(500, 600);
   if (S().hand[i] === null) discarded++;
 });
+ok('五种卡都能拖到弃牌堆丢掉', discarded === kinds.length, discarded);
+ok('弃牌后模式保持开启（不限张数）', UI.discardMode === true, 'discardMode=' + UI.discardMode);
+ok('弃牌计数徽章同步', String(store['discard-count'].textContent) === String(kinds.length), store['discard-count'].textContent);
+// 非弃牌模式下拖到弃牌堆 = 不弃（防误丢）—— 先退出模式再拖
+// （上面循环已把 5 张全弃光，先补一张回去）
+S().hand[0] = { key: 'farm' };
 UI.setDiscardMode(false);
-ok('五种卡都能在弃牌模式下点掉', discarded === kinds.length, discarded);
-
+document.elementFromPoint = function () { return store['btn-discard']; };
+UI.startDrag(0, 'farm', 500, 600);
+UI.endDrag(500, 600);
+ok('非弃牌模式拖到弃牌堆不会弃牌', S().hand[0] !== null, 'hand[0]=' + S().hand[0]);
 /* ==================== 10 §19 政策三选一 ==================== */
 console.log('\n== 10 政策三选一颁布 ==');
 Game.reset();

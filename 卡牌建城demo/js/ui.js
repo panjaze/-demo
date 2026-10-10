@@ -449,25 +449,13 @@ const UI = {
 
   /* ==================== 弃牌模式 ==================== */
 
-  /** 弃牌模式点一张手牌（第六十六次修订：抽成方法，实机与测试共用同一条路径） */
-  onHandCardClick(handIdx) {
-    const item = Game.state.hand[handIdx];
-    if (!item) return false;
-    const nm = Game.cardInfo(item.key).name;
-    if (!Game.discard(handIdx)) return false;
-    Engine.audio.hurt();
-    this.setDiscardMode(false);
-    UI.hint('已弃掉「' + nm + '」（不返还资源）');
-    return true;
-  },
-
   setDiscardMode(on) {
     this.discardMode = !!on;
     const bar = $('hand-bar');
     if (bar) bar.classList.toggle('discard-mode', this.discardMode);
     const btn = $('btn-discard');
     if (btn) btn.classList.toggle('active', this.discardMode);
-    if (this.discardMode) UI.hint('弃牌模式：点一张要弃掉的手牌（再点一次弃牌角标或按 Esc 退出）');
+    if (this.discardMode) UI.hint('弃牌模式：把要弃掉的牌拖到右下角弃牌堆（不限张数 · Esc / 再点弃牌退出）');
     UI.render();
   },
 
@@ -713,12 +701,9 @@ const UI = {
       const handIdx = parseInt(card.dataset.hand, 10);
       const item = Game.state.hand[handIdx];
       if (!item) return;
-      // 弃牌模式：点一下就弃掉（逻辑抽成 onHandCardClick，供测试与实机共用同一条路径）
-      if (self.discardMode) {
-        e.preventDefault();
-        self.onHandCardClick(handIdx);
-        return;
-      }
+      /* ★ 第六十七次修订：弃牌模式改成「拖到右下角弃牌堆」，且**不自动退出**（不限张数）。
+       *   之前是点卡即弃 —— 但不限张数的模式下，一下点错就白丢一张，拖拽给一次反悔的机会。
+       *   所以弃牌模式里点卡不弃牌，照常进入拖拽，只有拖到弃牌堆上松手才算。 */
       e.preventDefault();
       self.startDrag(handIdx, item.key, e.clientX, e.clientY);
     });
@@ -1060,7 +1045,10 @@ const UI = {
     g.style.top = y + 'px';
 
     // 高亮落点：交给沙盘在地图上整体绘制（Sandbox.drawDropPreview）
-    // ★ 第六十六次修订：弃牌落区已删 —— 弃牌统一走「弃牌模式点卡」，拖拽不再承担弃牌
+    const hit = this.hitTest(x, y);
+    const dzBtn = $('btn-discard');
+    if (dzBtn) dzBtn.classList.toggle('dz-hover', !!(hit && hit.zone === 'discard'));
+
 
     if (this.drag && this.drag.kind === 'building') {
       // 拿起建筑卡 = 建造模式（网格增强）；光标在地图上就显示占地幽灵框（合法与否都画，非法标红）
@@ -1086,6 +1074,9 @@ const UI = {
     const el = document.elementFromPoint(x, y);
     if (!el) return null;
     if (!this.drag) return null;
+    /* ★ 弃牌堆 = 右下角的「弃牌」角标（StS 式牌堆）。所有卡种都可拖上去弃掉，
+     *   判定放在卡种过滤之前 —— 效果牌/道路牌此前根本进不了落点判定。 */
+    if (el.closest('#btn-discard')) return { zone: 'discard' };
     const dragInfo = Game.cardInfo(this.drag.key);
     const dragRepair = this.drag.kind === 'effect' && dragInfo.eff === 'repair';
     if (this.drag.kind !== 'building' && this.drag.kind !== 'upgrade' && !dragRepair) return null;
@@ -1122,6 +1113,19 @@ const UI = {
     const hit = this.hitTest(x, y);
     const handIdx = d.handIdx;
     let ok = false;
+
+    /* ★ 弃牌堆（第六十七次修订）：**仅在弃牌模式下**，任意卡种拖到右下角弃牌堆 = 弃掉。
+     *   模式不自动退出（不限张数），Esc / 再点弃牌角标退出。
+     *   非弃牌模式时落在这里 = 普通取消，不会误丢牌。 */
+    if (hit && hit.zone === 'discard' && this.discardMode) {
+      ok = Game.discard(handIdx);
+      UI.hint(ok ? '已弃牌（不返还资源）· 可继续拖牌弃掉，Esc 退出'
+                 : '弃牌失败');
+      if (ok) Engine.audio.pickup(); else Engine.audio.hurt();
+      this.cancelDrag();
+      UI.render();
+      return;
+    }
 
     if (d.kind === 'effect') {
       // 效果牌：原地松手（位移很小）= 使用；修缮牌可拖到建筑；要弃牌走「弃牌模式点卡」
@@ -1185,6 +1189,8 @@ const UI = {
   },
 
   cancelDrag() {
+    const _dz = $('btn-discard');
+    if (_dz) _dz.classList.remove('dz-hover');
     Sandbox.dropPreview = null;
     if (!this.drag) return;
     this.drag.ghost.remove();
