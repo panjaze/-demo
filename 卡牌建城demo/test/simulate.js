@@ -81,7 +81,9 @@ function playOne() {
   const M = { firstBuild: null, firstPower: null, b5: null, b10: null,
               castle2: null, castle3: null, castle4: null, castle5: null,
               firstSoldier: null, soldierCap: null, firstEffect: null,
-              discarded: 0, reopen: 0, stuck: 0, curve: [], energyPerTickEnd: 0 };
+              discarded: 0, reopen: 0, stuck: 0, curve: [], energyPerTickEnd: 0,
+              /* ★ 第六十九次修订：AI 健康度 */
+              aiBarracks: null, aiCastle2: null, aiEnergyMin: 0, aiEnergyNeg: false };
 
   function mark(k, t) { if (M[k] === null) M[k] = t; }
 
@@ -272,6 +274,13 @@ function playOne() {
     if (M.firstSoldier === null && Game.totalTroops('p1') > 0) mark('firstSoldier', t + 1);
     if (M.soldierCap === null && Game.totalTroops('p1') >= Game.maxTroops('p1')) mark('soldierCap', t + 1);
 
+    /* ★ 第六十九次修订：AI 健康度 —— AI 死局 bug（抽到「常备军」后能量一路负、整局建不出兵营）
+     *   就是靠这个维度暴露的（40 种子 20%）。没有它，平衡回归只能看见玩家侧。 */
+    if (M.aiBarracks === null && Game.enemyBuildings().some(function (b) { return b.type === 'barracks'; })) mark('aiBarracks', t + 1);
+    if (M.aiCastle2 === null && (S.enemyLevel || 1) >= 2) mark('aiCastle2', t + 1);
+    if (S.enemyRes && S.enemyRes.energy < M.aiEnergyMin) M.aiEnergyMin = S.enemyRes.energy;
+    if (S.enemyRes && S.enemyRes.energy < 0) M.aiEnergyNeg = true;
+
     if ((t + 1) % 60 === 0) {
       M.curve.push({ t: t + 1, e: S.res.energy, f: S.res.food,
                      lv: S.castleLevel, slots: Game.buildingsUsed(), sol: Game.totalTroops('p1'),
@@ -301,6 +310,8 @@ function playOne() {
     discarded: M.discarded,
     reopen: M.reopen,
     stuck: M.stuck,
+    aiBarracks: M.aiBarracks, aiCastle2: M.aiCastle2,
+    aiEnergyMin: Math.round(M.aiEnergyMin), aiEnergyNeg: M.aiEnergyNeg,
   };
   return M;
 }
@@ -401,7 +412,16 @@ Object.keys(sample.buildings).sort().forEach(function (k) {
   console.log('    ' + k + ' × ' + sample.buildings[k]);
 });
 
-console.log('\n== 6 死锁检测 ==');
+console.log('\n== 6 AI 健康度 ==');
+timeline('aiBarracks', 'AI 首个兵营');
+timeline('aiCastle2',  'AI 主城 Lv2');
+const aiNeg = runs.filter(function (r) { return r.aiEnergyNeg; }).length;
+const aiNoBrk = runs.filter(function (r) { return r.aiBarracks === null; }).length;
+console.log('  AI 能量曾变负       ' + aiNeg + '/' + runs.length +
+            '   AI 整局无兵营 ' + aiNoBrk + '/' + runs.length +
+            (aiNoBrk || aiNeg ? '   ← ⚠️ AI 出现死局，查 aiPickPolicy / 事件' : ''));
+
+console.log('\n== 7 死锁检测 ==');
 const dead = ends.filter(function (e) { return e.castleLevel === 1 && e.slots <= 2; }).length;
 const noPower = runs.filter(function (r) { return r.firstPower === null; }).length;
 console.log('  从未建出能源站：' + noPower + ' / ' + runs.length +

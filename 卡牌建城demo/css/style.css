@@ -591,11 +591,21 @@ html, body {
 .quest-row b { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 
 /* ===== §20 事件预警条（第二十一次修订：可视化预期） ===== */
+/* ★ 第六十九次修订：事件预警条搬进顶栏（此前在 display:none 的 legacy-info 里不可见） */
 #event-meter {
-  position: relative; width: 84px; height: 18px; border-radius: 9px;
-  border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.35);
-  overflow: hidden; cursor: help; flex: 0 0 auto; margin-left: 6px;
+  position: relative; width: 78px; height: 20px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.28); background: rgba(0,0,0,.42);
+  overflow: hidden; cursor: help; flex: 0 0 auto; margin-left: 4px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
 }
+#event-chip-slot { display: flex; align-items: center; flex: 0 0 auto; margin-left: 2px; }
+#event-chip-slot:empty { display: none; }
+#event-chip-slot .event-chip {
+  width: 28px; height: 28px; border-radius: 7px; font-size: 16px;
+  cursor: pointer; animation: relic-pop .3s ease;
+  pointer-events: auto;
+}
+#event-chip-slot .event-chip:hover { transform: translateY(-1px) scale(1.08); filter: brightness(1.15); }
 #event-bar-fill {
   position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
   background: linear-gradient(90deg, rgba(126,180,255,.55), rgba(126,180,255,.85));
@@ -1114,6 +1124,13 @@ html, body {
   #hand-slots .card-choice .card-desc { font-size: 6.5px; }
   #hand-slots .card:not(.card-empty):hover { transform: rotate(0deg) translateY(-22px) scale(1.08); }
   #corner-ui { gap: 6px; right: 8px; bottom: 6px; }
+  /* ★ 第六十九次修订：矮屏宽度装不下事件预警条，让它让位（可点的事件 chip 保留） */
+  #event-meter { display: none; }
+  .tb-clock { min-width: 96px; }
+  .tb-res { padding: 0 9px 0 2px; }
+  .tb-res b { font-size: 16px; }
+  .res-slot { width: 38px; height: 38px; flex-basis: 38px; }
+  .res-slot .res-ico { width: 22px; height: 22px; }
   .corner-btn { width: 50px; height: 50px; border-radius: 8px; }
   .ck-icon { width: 22px; height: 22px; }
   .ck-label { font-size: 9px; }

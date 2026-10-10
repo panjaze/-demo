@@ -52,8 +52,9 @@ const DIR = 'D:/工程/自研/卡牌建城demo/test/';
           const top = document.elementFromPoint(cx, cy);
           if (!top) { out.push({ id: el.id || el.className, issue: '命中为空' }); return; }
           if (!el.contains(top) && !top.contains(el)) {
-            // 模态弹窗挡住后面的 UI 是设计如此，不算 bug
+            // 模态弹窗 / 主菜单盖住后面的 UI 是设计如此，不算 bug
             if (top.id === 'modal' || top.classList.contains('modal-box') || top.closest('.modal-box')) return;
+            if (top.closest('#menu')) return;
             out.push({ id: (el.id || el.className || el.tagName).slice(0, 34), issue: '被遮挡',
                        by: (top.id || top.className || top.tagName).slice(0, 34),
                        text: (el.textContent || '').trim().slice(0, 12), at: [Math.round(cx), Math.round(cy)] });
@@ -84,4 +85,5 @@ const DIR = 'D:/工程/自研/卡牌建城demo/test/';
   });
   console.log(total === 0 ? '\n✅ 无遮挡/无溢出' : '\n⚠️ 共 ' + total + ' 处');
   await browser.close();
+  if (total) process.exit(1);
 })().catch(e => { console.error(e.message); process.exit(1); });

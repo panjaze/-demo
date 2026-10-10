@@ -793,7 +793,8 @@ const UI = {
     });
 
     // §20 顶栏事件 chip 点击 → 查看生效中的事件 / 支付化解
-    $('policy-tray').addEventListener('click', function (e) {
+    //   （★ chip 已搬到顶栏 #event-chip-slot；policy-tray 在隐藏的 legacy-info 里，不再承担交互）
+    $('event-chip-slot').addEventListener('click', function (e) {
       const chip = e.target.closest('[data-eventchip]');
       if (chip && Game.state.events.p1.current) UI.setModal('eventview');
     });
@@ -1341,16 +1342,20 @@ const UI = {
           empty.textContent = '·';
           tray.appendChild(empty);
         }
-        // 当前生效的事件牌（单张轮换；点击可查看/化解）
+        // 当前生效的事件牌（单张轮换）—— ★ 第六十九次修订：渲染进顶栏 #event-chip-slot（可见可点）
         const ev = Game.activeEvent('p1');
-        if (ev) {
-          const chip = document.createElement('div');
-          chip.className = 'policy-chip tier-bad';
-          chip.textContent = ev.icon;
-          chip.dataset.eventchip = '1';
-          chip.title = '事件「' + ev.name + '」生效中：' + ev.desc +
-            (ev.cost ? '　（点击可支付资源化解）' : '');
-          tray.appendChild(chip);
+        const slot = $('event-chip-slot');
+        if (slot) {
+          slot.innerHTML = '';
+          if (ev) {
+            const chip = document.createElement('div');
+            chip.className = 'policy-chip tier-bad event-chip';
+            chip.textContent = ev.icon;
+            chip.dataset.eventchip = '1';
+            chip.title = '事件「' + ev.name + '」生效中：' + ev.desc +
+              (ev.cost ? '　（点击可支付资源化解）' : '');
+            slot.appendChild(chip);
+          }
         }
       }
       // §20 事件预警条：进度填充 + 临期 30s 转红显示秒数（卡牌城镇式可视化预期）

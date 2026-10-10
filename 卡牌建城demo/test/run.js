@@ -13,6 +13,11 @@ const SUITES = [
   { file: 'uitest.js',          label: '交互测试',   desc: '假 DOM 模拟点击/拖拽：放置 · 弃牌领遗物 · 操作条取消' },
   { file: 'idcheck.js',         label: 'DOM 引用',   desc: 'JS 取的 id 都存在于 index.html + 方法调用完整' },
   { file: 'debugpath-check.js', label: '调参路径',   desc: 'Engine.debug 的字符串配置路径都能解析（滑块不静默失效）' },
+  /* ★ 第六十九次修订：把"真浏览器全流程"与"遮挡审计"纳入门禁。
+   *   此前 fulltest 不在门禁里，加新手引导后悄悄掉到 7/34 也没人发现 —— 27 项 UI 流程断言集体失联；
+   *   遮挡/尺寸/层级类 bug（row-body 盖住角标、顶栏被撑爆）五层天生看不见，必须真浏览器实测。 */
+  { file: 'fulltest.js',        label: '真浏览器全流程', desc: '政策/抽卡/建造/升级/行军/任务/结算/相机（37 项）' },
+  { file: '_layout_audit.js',   label: '遮挡审计',   desc: '可交互元素不被别的层盖住 + 无横向溢出（11 状态 × 桌面/手机）' },
 ];
 
 const results = [];
@@ -29,5 +34,5 @@ SUITES.forEach(function (s) {
 const bad = results.filter(function (r) { return !r.ok; });
 console.log('================ 汇总 ================');
 results.forEach(function (r) { console.log('  ' + (r.ok ? '✓' : '✗') + ' ' + r.label); });
-console.log(bad.length ? '\n❌ ' + bad.length + ' 个套件失败 —— 不要交付' : '\n✅ 五层全绿');
+console.log(bad.length ? '\n❌ ' + bad.length + ' 个套件失败 —— 不要交付' : '\n✅ 七层全绿');
 process.exit(bad.length ? 1 : 0);

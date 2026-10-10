@@ -31,6 +31,10 @@
         <div class="tb-res"><span class="res-slot"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/food.png" alt=""></span><b id="res-food">40</b></div>
         <div class="tb-res"><span class="res-slot"><img class="tb-deco s-circle" src="assets/ui/topbar/slot-circle.png" alt=""><img class="res-ico" src="assets/ui/icons/soldier.png" alt=""></span><b id="tag-soldiers">0 / 60</b></div>
 
+        <!-- ★ 第六十九次修订：事件预警条 + 事件 chip 从 display:none 的 #legacy-info 搬回顶栏
+             —— 此前"查看/化解事件"与"事件预警"整个不可达（fulltest S11c 抓到的真 bug） -->
+        <span id="event-meter" title="距下一张事件牌"><i id="event-bar-fill"></i><b id="event-bar-label">?</b></span>
+        <span id="event-chip-slot" title=""></span>
         <button id="btn-policy" class="tb-btn tb-btn-text" title="查看/颁布政策"><img class="tb-ico" src="assets/ui/icons/ic-scroll.png" alt="">政策</button>
         <div class="tb-btns">
           <button id="btn-menu" class="tb-btn tb-btn-icon" title="主界面"><img class="tb-ico" src="assets/ui/icons/ic-home.png" alt=""></button>

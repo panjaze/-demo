@@ -119,16 +119,23 @@ const drag = async (fromBox, toXY) => {
     const s = await state();
     log('S3a', s.hand.filter(Boolean).length === 5, JSON.stringify(s.hand));
   });
-  await step('S3b 弃牌模式弃一张（先关商店弹窗）', async () => {
+  await step('S3b 弃牌模式：拖牌到右下角弃牌堆（先关商店弹窗）', async () => {
+    /* ★ 第六十八次修订：弃牌交互改为「拖到弃牌堆」，且模式不自动退出（不限张数） */
     await page.locator('#modal-close').click({ timeout: 3000 });
     await page.waitForTimeout(200);
     await page.locator('#btn-discard').click({ timeout: 3000 });
     await page.waitForTimeout(200);
     const before = (await state()).hand.filter(Boolean).length;
-    await page.locator('#hand-slots [data-hand]').first().click({ timeout: 3000, force: true });
-    await page.waitForTimeout(200);
+    const src = await page.locator('#hand-slots [data-hand]').first().boundingBox();
+    const dst = await page.locator('#btn-discard').boundingBox();
+    console.log('  [dbg S3b] src=' + JSON.stringify(src) + ' dst=' + JSON.stringify(dst) + ' hand=' + JSON.stringify(await page.evaluate(() => Game.state.hand)));
+    /* drag() 的第一个参数是**包围盒**（内部取 width/2），不是中心点 */
+    await drag(src, { x: dst.x + dst.width / 2, y: dst.y + dst.height / 2 });
+    await page.waitForTimeout(250);
     const after = (await state()).hand.filter(Boolean).length;
-    log('S3b', after === before - 1, `${before}→${after}`);
+    const modeStill = await page.evaluate(() => UI.discardMode);
+    const cnt = await page.evaluate(() => Game.state.discardCount);
+    log('S3b', after === before - 1 && modeStill, `${before}→${after} 模式保持=${modeStill} 计数=${cnt}`);
   });
 
   /* ===== S4 建造 ===== */
@@ -323,10 +330,20 @@ const drag = async (fromBox, toXY) => {
     const pr = page.locator('[data-action="policy-refresh"]').first();
     if (await pr.count()) { await pr.click({ timeout: 3000 }); await page.waitForTimeout(250); }
     const cards = await page.evaluate(() => document.querySelectorAll('#policy-cards .card[data-policy]').length);
-    await page.locator('#policy-cards .card[data-policy]').first().click({ timeout: 3000 });
+    /* ★ 第六十九次修订：挑一条「未颁布过」的政策点 —— 3 张 offer 是随机的，
+     *   可能包含已颁布的 key（点了走升级路径、槽位不增），此前因此偶发失败。 */
+    const pick = await page.evaluate(() => {
+      const P = Game.state.policy.p1;
+      const have = P.slots.map(s => s.key);
+      for (let i = 0; i < P.offer.length; i++) if (!have.includes(P.offer[i].key)) return i;
+      return -1;                                     // 三张全是已颁布的（极罕见）
+    });
+    const sel = pick >= 0 ? '#policy-cards .card[data-policy="' + pick + '"]' : '#policy-cards .card[data-policy]';
+    await page.locator(sel).first().click({ timeout: 3000 });
     await page.waitForTimeout(250);
     const s = await state();
-    log('S9', cards === 3 && s.polSlots >= 2, `卡${cards} 槽${s.polSlots}`);
+    log('S9', cards === 3 && (pick >= 0 ? s.polSlots >= 2 : s.polSlots >= 1),
+        `卡${cards} 槽${s.polSlots} 挑选=${pick}`);
   });
 
   /* ===== S10 主城升级 ===== */
@@ -362,7 +379,8 @@ const drag = async (fromBox, toXY) => {
   await step('S11c 事件 chip → eventview → 刷新/化解按钮存在', async () => {
     await forceClose();
     await page.evaluate(() => { Game.state.events.p1.offer = null; });
-    const chip = page.locator('#policy-tray [data-eventchip]').first();
+    // ★ 第六十九次修订：chip 已搬到顶栏 #event-chip-slot（policy-tray 在隐藏的 legacy-info 里）
+    const chip = page.locator('#event-chip-slot [data-eventchip]').first();
     if (await chip.count()) { await chip.click({ timeout: 3000 }); await page.waitForTimeout(250); }
     const s = await state();
     const hasView = await page.evaluate(() => !!document.querySelector('[data-action="event-dissolve"], [data-action="event-refresh"]'));
@@ -566,5 +584,7 @@ const drag = async (fromBox, toXY) => {
   results.filter(r => !r.ok).forEach(r => console.log('✗ ' + r.s + ' → ' + r.extra));
   errors.slice(0, 20).forEach(e => console.log(e));
   if (!errors.length) console.log('（无控制台错误）');
+  /* ★ 第六十九次修订：失败要退出非 0，才能进 run.js 门禁（此前只打印不退出，门禁看不见它挂） */
   await browser.close();
+  if (pass !== results.length || errors.length) process.exit(1);
 })().catch(e => { console.error('[t] 脚本异常:', e.message); process.exit(1); });
