@@ -1582,6 +1582,7 @@ const UI = {
 
     wrap.className = 'card card-' + info.kind + ' card-' + state +
                      (isShop ? ' card-shop' : (zone === 'pool' ? ' card-pool' : ' card-hand'));
+    wrap.dataset.key = key;   // ★ 卡面图按卡 key 映射（每张建筑卡专属场景插画，其余按类型共用）
 
     /* ★ 第五十六次修订：卡面 1:1 复刻参考图 —— 整卡图（含色带/立绘/羊皮纸区/费用徽章）从参考图裁切，
      *   游戏内只叠加真实名称、描述与费用数字（羊皮纸区空白，直接书写） */

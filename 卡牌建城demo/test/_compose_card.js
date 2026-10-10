@@ -5,7 +5,14 @@ const CHROME = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 // 窗口区在 card-frame-v3.png（裁后）中的归一化位置
 const WIN = { x1: 0.085, y1: 0.195, x2: 0.915, y2: 0.635 };
 const SCENES = [
-  { scene: 'assets/ui/art/farm-scene.png',    out: 'cards/building-v5.png' },
+  { scene: 'assets/ui/art/farm-scene.png',     out: 'cards/farm-v5.png' },
+  { scene: 'assets/ui/art/atelier-scene.png',  out: 'cards/atelier-v5.png' },
+  { scene: 'assets/ui/art/power-scene.png',    out: 'cards/power-v5.png' },
+  { scene: 'assets/ui/art/barracks-scene.png', out: 'cards/barracks-v5.png' },
+  { scene: 'assets/ui/art/tower-scene.png',    out: 'cards/tower-v5.png' },
+  { scene: 'assets/ui/art/road-scene.png',     out: 'cards/road-v5.png' },
+  { scene: 'assets/ui/art/effect-scene.png',   out: 'cards/effect-v5.png' },
+  { scene: 'assets/ui/art/upgrade-scene.png',  out: 'cards/upgrade-v5.png' },
 ];
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-proxy-server'] });

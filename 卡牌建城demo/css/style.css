@@ -384,10 +384,16 @@ html, body {
   transition: transform .14s cubic-bezier(.3,1.4,.5,1), box-shadow .12s, filter .12s;
   transform-origin: bottom center;
 }
-.card-building { --card-bg: url('../assets/ui/cards/building-v5.png'); }
-.card-effect   { --card-bg: url('../assets/ui/cards/effect.png'); }
-.card-road     { --card-bg: url('../assets/ui/cards/road.png'); }
-.card-upgrade  { --card-bg: url('../assets/ui/cards/policy.png'); }
+/* ★ 卡面按卡 key 映射：建筑五张各有专属场景插画；道路/效果/升级按类型共用 */
+.card[data-key="farm"]     { --card-bg: url('../assets/ui/cards/farm-v5.png'); }
+.card[data-key="atelier"]  { --card-bg: url('../assets/ui/cards/atelier-v5.png'); }
+.card[data-key="power"]    { --card-bg: url('../assets/ui/cards/power-v5.png'); }
+.card[data-key="barracks"] { --card-bg: url('../assets/ui/cards/barracks-v5.png'); }
+.card[data-key="tower"]    { --card-bg: url('../assets/ui/cards/tower-v5.png'); }
+.card[data-key="road"], .card[data-key="dirt"], .card[data-key="stone"], .card[data-key="avenue"] { --card-bg: url('../assets/ui/cards/road-v5.png'); }
+.card[data-key="upgrade"]  { --card-bg: url('../assets/ui/cards/upgrade-v5.png'); }
+.card[data-key="harvest"], .card[data-key="muster"], .card[data-key="repair"], .card[data-key="reclaim"],
+.card[data-key="fastCrop"], .card[data-key="levy"], .card[data-key="rally"] { --card-bg: url('../assets/ui/cards/effect-v5.png'); }
 .card:hover { filter: brightness(1.06); }
 
 .card-name {   /* 信息面板：标题（衬线+凹印） */
@@ -625,7 +631,7 @@ html, body {
 /* 手牌托盘：卡片像搁在一个凹槽里 */
 #hand-bar .row-body {
   flex: 1 1 auto; display: flex; align-items: flex-end; gap: 8px;
-  min-height: 0; position: relative;
+  min-height: 0; position: relative; justify-content: center;
   padding: 0 20px;
   background: none; box-shadow: none; border-radius: 0;
   pointer-events: auto;
