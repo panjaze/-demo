@@ -34,62 +34,75 @@ html, body {
 
 /* ==================== 顶栏 ==================== */
 
-/* ---------- 顶栏（第五十六次修订：背景 = 参考图裁切的木质横幅，数字叠在图内资源位） ---------- */
+/* ---------- 顶栏（第六十三次修订：flex 流布局 space-between，按钮图标化） ---------- */
 #topbar {
-  flex: 0 0 48px;
-  display: flex; align-items: center;
-  padding: 0;
+  flex: 0 0 56px;
+  display: flex; align-items: center; gap: 2.2%;
+  padding: 0 14px 0 10px;
   background: url('../assets/ui/crops/topbar.png') center / 100% 100% no-repeat;
   border: none;
   pointer-events: auto;
   position: relative;
 }
-.tb-clock {
-  position: absolute; left: 58px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; line-height: 1.15;
-}
 #topbar::before {   /* 左端徽章：蓝盾城堡（参考图第 3 板块元素） */
-  content: ''; position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
-  width: 46px; height: 46px;
+  content: ''; position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  width: 52px; height: 52px;
   background: url('../assets/ui/emblem.png') center / contain no-repeat;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,.5));
 }
+.tb-clock {
+  display: flex; flex-direction: column; line-height: 1.15;
+  margin-left: 50px; min-width: 88px;
+}
 .tb-clock #clock { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: #e8f0f8; }
 .tb-clock .tb-sub { font-size: 8px; color: #b8c8dc; font-variant-numeric: tabular-nums; }
-.tb-resnum {   /* 数字位：对齐背景横幅里画死的示例数字，用真实值覆盖 */
-  position: absolute; top: 50%; transform: translateY(-50%);
+.tb-resnum {   /* 资源组：图标 + 数字（对齐背景横幅里的资源位） */
+  display: flex; align-items: center; gap: 7px;
   font-size: 15px; font-weight: 800; color: #f0e8d8;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px rgba(0,0,0,.5);
-  white-space: nowrap;
+  white-space: nowrap; min-width: 84px;
 }
-.rn-energy  { left: 33%; }
-.rn-food    { left: 57.5%; }
-.rn-soldier { left: 79%; font-size: 12px; }
+.tb-resnum .res-ico { width: 22px; height: 22px; background: none; border-radius: 0; }
 
-.tb-btns { position: absolute; right: 1%; top: 50%; transform: translateY(-50%); display: flex; gap: 5px; align-items: center; }
+.tb-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .tb-btn {
-  pointer-events: auto; font: inherit; font-size: 11px; font-weight: 700;
+  pointer-events: auto; font: inherit; font-weight: 700;
   padding: 5px 12px; border-radius: 6px;
   border: none;
   background: url('../assets/ui/crops/btn-stone.png') center / 100% 100% no-repeat;
   color: #f4ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.65);
   cursor: pointer; transition: filter .12s, transform .1s;
 }
+.tb-btn-text { font-size: 11px; }
+.tb-btn-icon { width: 40px; height: 32px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; }
 .tb-btn:hover { filter: brightness(1.18); }
 .tb-btn:active { transform: scale(.96); }
-.tb-btn-ghost { background: rgba(24,20,14,.55); color: #c9b890; box-shadow: inset 0 0 0 1px rgba(201,184,144,.35); }
 
-/* ---------- 弹窗（羊皮纸+木框材质，与卡牌体系统一） ---------- */
+/* ---------- 弹窗（★ 第六十三次修订：i2i 横版羊皮纸木框 panel-wide.png，替换 CSS 纯色） ---------- */
 .modal-box {
   width: 740px; max-height: 470px;
-  border-radius: 10px;
-  border: 3px solid #6b4a2a;
-  background: #ece0c6;
-  box-shadow: inset 0 0 0 1px rgba(255,236,200,.5), 0 18px 50px rgba(0,0,0,.6);
-  padding: 12px 16px;
+  border-radius: 6px; border: none;
+  background: url('../assets/ui/panel-wide.png') center / 100% 100% no-repeat;
+  box-shadow: 0 18px 50px rgba(0,0,0,.6);
+  padding: 3.2% 4.5% 3% 5%;                 /* 标题落木框内的深色 header 带，正文落在羊皮纸区 */
   display: flex; flex-direction: column; gap: 8px;
+  position: relative;
 }
+.modal-head { display: flex; align-items: baseline; gap: 10px; }
+.modal-head .rh-title { font-size: 16px; font-weight: 800; color: #f0e8d0; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
+.modal-close {
+  position: absolute; right: 4.2%; top: 6.5%;
+  margin: 0; font: inherit; font-size: 15px; line-height: 1;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: none;
+  color: #d8c8a0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-close:hover { filter: brightness(1.3); }
+.modal-body { flex: 1 1 auto; min-height: 0; }
+.modal-box .muted { color: #5f4c38; }
+#legacy-info { display: none; }
 .modal-head { display: flex; align-items: baseline; gap: 10px; }
 .modal-head .rh-title { font-size: 16px; font-weight: 800; color: #3a2c18; }
 .modal-close {
@@ -571,11 +584,12 @@ html, body {
   border: 1px solid rgba(0,0,0,.4);
 }
 
-/** 弃牌奖励·遗物 与 政策三选一（第五十一次修订：竖卡 110×165，描述常显） */
+  /** 弃牌奖励·遗物 与 政策三选一（第六十次修订：竖卡 128×192 对齐大气框，描述常显） */
 .reward-cards .card, #policy-cards .card {
-  width: 110px; height: 165px; flex: 0 0 110px;
+  width: 128px; height: 192px; flex: 0 0 128px;
 }
 .reward-cards .card-desc, #policy-cards .card-desc { display: block; font-size: 9px; }
+#policy-cards { align-items: center; }
 .reward-cards .card-relic:hover, #policy-cards .card:hover {
   box-shadow: 0 14px 30px rgba(0,0,0,.55);
   filter: brightness(1.06);
@@ -617,9 +631,8 @@ html, body {
 #modal.hidden { display: none; }
 
 .modal-box {
-  width: 740px; max-height: 470px;
-  padding: 12px 16px;
-  display: flex; flex-direction: column; gap: 8px;
+   width: 740px; height: 470px; max-height: none;
+   display: flex; flex-direction: column; gap: 8px;
 }
 .modal-head { display: flex; align-items: baseline; gap: 10px; }
 .modal-head .rh-title { font-size: 16px; font-weight: 800; color: #3a2c18; }
@@ -629,8 +642,8 @@ html, body {
   border: 1px solid rgba(74,53,32,.4); background: rgba(74,53,32,.12);
   color: #4a3520; cursor: pointer;
 }
-.modal-close:hover { background: rgba(255,255,255,.22); }
-.modal-body { flex: 1 1 auto; min-height: 0; }
+.modal-close:hover { background: rgba(74,53,32,.24); }
+.modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
 #pane-shop {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px;
