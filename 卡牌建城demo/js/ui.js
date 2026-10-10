@@ -113,9 +113,10 @@ const UI = {
     el.classList.remove('hidden');
     const r = chip.getBoundingClientRect();
     const uiR = $('ui').getBoundingClientRect();
-    const kk = uiR.width / 1280 || 1;
-    el.style.left = Math.max(8, Math.round((r.left - uiR.left) / kk) - 10) + 'px';
-    el.style.top = Math.round((r.bottom - uiR.top) / kk + 8) + 'px';
+    /* ★ 第四十八次修订：逻辑尺寸已动态化（scale 恒为 1），#ui 的真实 px = 逻辑 px，
+     *   直接用相对偏移定位，不再除以旧的缩放系数。 */
+    el.style.left = Math.max(8, Math.round(r.left - uiR.left) - 10) + 'px';
+    el.style.top = Math.round(r.bottom - uiR.top + 8) + 'px';
   },
 
   /** 某种资源的「所有产出来源 + 速率」与「消耗途径」 */
@@ -1264,6 +1265,9 @@ const UI = {
     const rc = Game.roadCountOf('p1'), rcap = CFG.map.roadCapPerSide || 0;
     $('road-count').textContent = rc;
     $('road-cap').textContent = rcap;
+    /* ★ 第四十七次修订（经济约束）：把「下一格多少钱」摆在脸上 —— 单价随已铺格数递增 */
+    const rnext = $('road-price');
+    if (rnext) rnext.textContent = Game.roadUnitPrice('p1') + '⚡/格';
     const rb = $('road-budget');
     if (rb) rb.style.color = (rcap && rc >= rcap) ? '#ff9b3d' : '';
 

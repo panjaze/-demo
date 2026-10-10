@@ -114,6 +114,9 @@ const Game = {
     S.enemyRes = { energy: CFG.resource.initial.energy, food: CFG.resource.initial.food };
     S.enemyLevel = 1;
     S.enemyDecideT = 0;
+    /* ★ 第四十七次修订：主干式铺路的「锁定目标 + 已规划路径」（走完/失效才重选） */
+    S.enemyRoadGoal = null;
+    S.enemyRoadPath = null;
     S.buildings = {};
     S.occ = {};                 // 占地索引："gx,gy" → 建筑 anchor key（由 reindex() 重建）
     S.resGuard = {};
@@ -349,11 +352,21 @@ const Game = {
    * 永远无法占领；过河只能走两座现成的木桥（遇水搭桥）。
    */
   canPlaceRoad(gx, gy) {
+    return this.roadableTile(gx, gy) && this.roadAdjacentAny(gx, gy);
+  },
+
+  /**
+   * ★ 第四十七次修订：该格「将来可以铺成路」—— 空地 + 非资源点 + 非水面。
+   * **故意不看是否已与路网相邻** —— 路径规划要能在「将来才会变成路」的格上走，
+   * 而 canPlaceRoad 基于**当前**状态（相邻必须有路），规划时用它会一步都走不出去。
+   * 路径的连续性保证了按顺序逐格铺时，轮到某格时它的前驱已成路 → canPlaceRoad 必然成立。
+   */
+  roadableTile(gx, gy) {
     if (!this.isEmptyTile(gx, gy)) return false;
     if (this.resourceAt(gx, gy)) return false;
     if (this.isRoadAt(gx, gy)) return false;
     if (this.terrainAt(gx, gy) === 'W') return false;    // 水面不能铺路（桥是唯一过河通道）
-    return this.roadAdjacentAny(gx, gy);
+    return true;
   },
 
   /**
@@ -421,6 +434,16 @@ const Game = {
   /** 某方还能铺几格路（第四十六次修订：道路额度上限） */
   roadBudgetLeft(side) {
     return Math.max(0, (CFG.map.roadCapPerSide || 999) - this.roadCountOf(side || 'p1'));
+  },
+
+  /**
+   * ★ 第四十七次修订：铺**一格**的当前单价 = 土路基础价 + 已铺档位。
+   * 「已铺档位」= floor(已铺路数 ÷ CFG.map.roadPriceStep) —— 每 20 格 +1⚡。
+   * AI 与玩家**共用这一个价格源**：AI 每铺一格照此扣能量，玩家道路卡的递增部分也照此算。
+   */
+  roadUnitPrice(side) {
+    const step = CFG.map.roadPriceStep || 20;
+    return CFG.cards.roads.dirt.price + Math.floor(this.roadCountOf(side || 'p1') / step);
   },
 
   /** 拆掉一格自己铺的路，释放额度（"铺拆结合"；预设官道/桥不可拆） */
@@ -530,8 +553,11 @@ const Game = {
     const r = CFG.cards.roads[key];
     if (r) {
       // 政策「工程学」/「开疆」：道路牌价格与格数动态化（下限 1⚡ / 1 格）
-      const price = Math.max(1, r.price + this.statAdd('p1', 'roadCost'));
       const tiles = Math.max(1, r.tiles + this.statAdd('p1', 'roadTiles'));
+      /* ★ 第四十七次修订（经济约束）：道路卡价 = 基础价 + 政策修正 + **递增部分**。
+       *   递增部分 = 当前已铺档位 × 格数，与 AI 的「每格 roadUnitPrice」同源。 */
+      const roadAdd = this.roadUnitPrice('p1') - CFG.cards.roads.dirt.price;
+      const price = Math.max(1, r.price + this.statAdd('p1', 'roadCost') + tiles * roadAdd);
       return {
         key: key, kind: 'road', name: r.name, icon: r.icon,
         price: price, castleReq: r.castleReq || 1,
@@ -1065,6 +1091,9 @@ const Game = {
       S[key] = (S[key] || 0) + dt * cnt;
       if (S[key] < CFG.map.logisticsRoadSec) return;
       S[key] = 0;
+      /* ⚠️ 物流点的自动铺路**保持原逻辑不改**（第四十七次修订的决策）：
+       *   用户明确「玩家侧先只做成本对称」，物流点属于玩家侧的自动铺路功能，
+       *   不做策略改动。（它每 60 秒才 1 格，量小；AI 是每 10 秒 1 格，才是蔓延主源） */
       const foeHome = side === 'p1' ? S.enemyCastle : S.castle;
       const targets = CFG.map.resources.filter(function (r) {
         return S.resourceOwner[r.gx + ',' + r.gy] !== side;
@@ -1967,43 +1996,195 @@ const Game = {
     return frontier;
   },
 
-  /** AI 铺一格路（朝最近的未占资源点方向扩张），消耗 1 能量 —— 与玩家同一套铺路规则 */
-  enemyRoad() {
+  /* ==================== §26 主干式铺路（第四十七次修订） ====================
+   * 旧铺法：在「铺路前沿带」里选离目标曼哈顿距离最近的格。前沿带会越铺越宽，
+   *   于是路横着开花、最终连成一整片（实测一局 197~202 格，近半收入）。
+   * 新铺法：**先规划一条到目标的路径，只铺这条路径上的格** —— 路长成「主干 + 短支线」。
+   *   与业界一致（《三国:谋定天下》选目标→系统规划最优路线→连续铺；《率土之滨》直线推进）。
+   */
+
+  /** 四向邻格里有没有道路（**只算路**，不含建筑/主城）—— 用于判断「资源点是否已经通路」 */
+  adjHasRoad(gx, gy) {
+    const D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let i = 0; i < D.length; i++) {
+      if (this.isRoadAt(gx + D[i][0], gy + D[i][1])) return true;
+    }
+    return false;
+  },
+
+  /** 主城的 2×2 占地格（路径规划里「贴着主城 = 到达」的目标邻域） */
+  castleFootCells(c) {
+    const f = CFG.castle.foot || { w: 2, h: 2 };
+    const out = [];
+    for (let y = 0; y < f.h; y++) {
+      for (let x = 0; x < f.w; x++) out.push({ gx: c.gx + x, gy: c.gy + y });
+    }
+    return out;
+  },
+
+  /**
+   * 选一个铺路目标（选定后**锁定**，走完整条路径才换）。
+   * 旧版每次决策都重新挑「最近的未占资源点」，于是目标被不断牵走 → 路呈放射状。
+   * requireBuildings = true（AI 用）：己方建筑够多才转攻敌方主城。
+   *   ⚠️ 第四十七次修订当前**只有 AI 走这条路**（requireBuildings=true）——
+   *   物流点的自动铺路刻意保持旧逻辑不动（玩家侧本轮只做成本对称），
+   *   参数保留 false 分支供日后需要时复用。
+   */
+  pickRoadGoal(side, requireBuildings) {
     const S = this.state;
-    if (S.enemyRes.energy < CFG.cards.roads.dirt.price) return false;
-    const home = S.enemyCastle;
-    const free = CFG.map.resources.filter(function (r) {
-      return S.resourceOwner[r.gx + ',' + r.gy] !== 'p2';
+    const home = side === 'p1' ? S.castle : S.enemyCastle;
+    const foe = side === 'p1' ? S.enemyCastle : S.castle;
+    const self = this;
+    const halfOK = function (x, y) {
+      return Math.abs(x - home.gx) + Math.abs(y - home.gy) <=
+             Math.abs(x - foe.gx) + Math.abs(y - foe.gy);
+    };
+    // 候选资源点：未占 + 还没通路 + 在本方半区（半区外的铺不到，别浪费一个目标位）
+    const open = CFG.map.resources.filter(function (r) {
+      if (S.resourceOwner[r.gx + ',' + r.gy] === side) return false;
+      if (self.adjHasRoad(r.gx, r.gy)) return false;
+      return halfOK(r.gx, r.gy);
     });
-    // 第二批 AI：早期朝最近未占资源点修路；经济铺开后转为朝玩家主城修「进攻走廊」
-    // （半区限制仍然生效 —— 走廊只修到中线，最后一段走玩家自己的路，道路互通）
-    let goal;
-    if (free.length && this.enemyBuildings().length < CFG.enemy.corridorMinBuildings) {
-      goal = free.reduce(function (a, b) {
+    const mine = side === 'p1' ? this.myBuildings() : this.enemyBuildings();
+    const enoughBuildings = mine.length >= CFG.enemy.corridorMinBuildings;
+    if (open.length && !(requireBuildings && enoughBuildings)) {
+      const near = open.reduce(function (a, b) {
         return (Math.abs(a.gx - home.gx) + Math.abs(a.gy - home.gy)) <
                (Math.abs(b.gx - home.gx) + Math.abs(b.gy - home.gy)) ? a : b;
       });
-    } else {
-      goal = { gx: S.castle.gx, gy: S.castle.gy };
+      return { key: 'res:' + near.gx + ',' + near.gy, cells: [{ gx: near.gx, gy: near.gy }] };
     }
-    // 只沿「连通前沿」铺：保证新格子一定接在己方路网上（不会出现孤立碎片）
-    const frontier = this.roadFrontier('p2');
-    const self = this;
-    let best = null, bestD = 1e9;
-    frontier.forEach(function (p) {
-      // 只在自己的半区铺路：离自己主城不能比离玩家主城更远（AI 管自己的区域）
-      if (Math.abs(p.gx - home.gx) + Math.abs(p.gy - home.gy) >
-          Math.abs(p.gx - S.castle.gx) + Math.abs(p.gy - S.castle.gy)) return;
-      // 官道偏好（第三十五次修订）：同距离下优先沿旧官道「开垦」，误差容忍 0.5 格
-      const d = Math.abs(p.gx - goal.gx) + Math.abs(p.gy - goal.gy) -
-                (self.isOfficialRoad(p.gx, p.gy) ? 0.5 : 0);
-      if (d < bestD) { bestD = d; best = { gx: p.gx, gy: p.gy }; }
+    return { key: 'foe', cells: this.castleFootCells(foe) };
+  },
+
+  /** 已锁定的目标是否仍然有意义（资源点被己方占了 → 失效，该换目标） */
+  roadGoalValid(side, goal) {
+    if (!goal) return false;
+    if (goal.key.indexOf('res:') === 0) {
+      const p = goal.key.slice(4).split(',');
+      return this.state.resourceOwner[(+p[0]) + ',' + (+p[1])] !== side;
+    }
+    return true;
+  },
+
+  /**
+   * ★ 主干式算法的核心：规划「从己方主城到目标」的一条路径。
+   *
+   * Dijkstra（h ≡ 0 —— 图只有 29×15，不值得为效率引入堆；h 若取曼哈顿会高估
+   * 实际权重、让「优先复用已有路」不再最优）：
+   *   - 走己方可走格（道路/己方建筑/主城）代价 **0** → 优先复用已有路，不重复铺
+   *   - 走「将来可铺的空格」（roadableTile）代价 **1**，其中**官道格 0.5**
+   *     （§14.1 第三十五次修订的官道偏好：同距离下优先沿旧官道开垦）
+   *   - 半区限制沿用旧规则：只在自己半区铺（最后一段走对方的路，道路是互通的）
+   *   - **到不了目标时退化为「朝目标推进到能到的最远处」**（AI 会一路推到中线就停），
+   *     否则 A* 一旦失败就返回空 → AI 再也不铺路，等于把 AI 的手绑住。
+   *
+   * 返回：**待铺格列表**（从己方端到目标端，已排除现成的路）。
+   *   ⚠️ 调用方必须**按顺序逐格铺** —— 连续性保证轮到某格时它的前驱已成路，
+   *      所以那时 canPlaceRoad 必然成立（规划阶段用的 roadableTile 不看连通）。
+   */
+  planRoadPath(side, goalCells) {
+    const S = this.state, self = this;
+    const home = side === 'p1' ? S.castle : S.enemyCastle;
+    const foe = side === 'p1' ? S.enemyCastle : S.castle;
+    const D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const kOf = function (x, y) { return x + ',' + y; };
+    const hOf = function (x, y) {
+      let m = 1e9;
+      for (let i = 0; i < goalCells.length; i++) {
+        const d = Math.abs(x - goalCells[i].gx) + Math.abs(y - goalCells[i].gy);
+        if (d < m) m = d;
+      }
+      return m;
+    };
+    const halfOK = function (x, y) {
+      return Math.abs(x - home.gx) + Math.abs(y - home.gy) <=
+             Math.abs(x - foe.gx) + Math.abs(y - foe.gy);
+    };
+    /* ① Dijkstra 求 dist / prev。
+     *    key 一律用字符串 "x,y" —— 早先版本在 open 里放 {gx,gy} 对象、
+     *    又在弹出时顺手更新 best，结果 best 会漏格（实测理论最优 (15,8) 被跳过、
+     *    给出 (22,4)），路径每周期漂移一次，路就铺成一片。用字符串 key + 独立选点修掉。 */
+    const sk = kOf(home.gx, home.gy);
+    const dist = {}, prev = {}, done = {};
+    dist[sk] = 0;
+    const open = [sk];
+    while (open.length) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (dist[open[i]] < dist[open[bi]]) bi = i;
+      const ck = open.splice(bi, 1)[0];
+      if (done[ck]) continue;
+      done[ck] = 1;
+      const cp = ck.split(',');
+      const base = dist[ck];
+      for (let i = 0; i < D.length; i++) {
+        const nx = (+cp[0]) + D[i][0], ny = (+cp[1]) + D[i][1];
+        if (nx < 0 || ny < 0 || nx >= CFG.map.cols || ny >= CFG.map.rows) continue;
+        if (!halfOK(nx, ny)) continue;
+        const nk = kOf(nx, ny);
+        if (done[nk]) continue;
+        let w;
+        if (self.walkable(nx, ny, side)) w = 0;                                        // 复用已有路：不要钱
+        else if (self.roadableTile(nx, ny)) w = self.isOfficialRoad(nx, ny) ? 0.5 : 1;  // 官道偏好 §14.1
+        else continue;
+        const nd = base + w;
+        if (dist[nk] === undefined || nd < dist[nk]) {
+          dist[nk] = nd;
+          prev[nk] = ck;
+          open.push(nk);
+        }
+      }
+    }
+    /* ② 确定性地选终点：所有可达格里 h 最小的那个（平局取 key 字典序）。
+     *    **与弹出顺序无关** —— 这是「路径不再每个周期换方向」的关键。 */
+    let bestK = sk, bestH = hOf(home.gx, home.gy);
+    Object.keys(dist).forEach(function (k) {
+      const p = k.split(',');
+      const h = hOf(+p[0], +p[1]);
+      if (h < bestH || (h === bestH && k < bestK)) { bestH = h; bestK = k; }
     });
-    if (!best) return false;
+    if (bestH >= hOf(home.gx, home.gy)) return [];   // 一步都推不出去（该方向已到头）
+    /* ③ 回溯：只保留「需要新铺的空格」（现成的路不入列表） */
+    const path = [];
+    let cur = bestK;
+    while (cur && cur !== sk) {
+      const p = cur.split(',');
+      if (!this.walkable(+p[0], +p[1], side)) path.push({ gx: +p[0], gy: +p[1] });
+      cur = prev[cur];
+    }
+    path.reverse();
+    return path;
+  },
+
+  /**
+   * AI 铺一格路（★ 第四十七次修订：主干式）。
+   * 目标锁定 → 规划路径 → 只铺路径的下一格；路径走完 / 目标失效才重选目标。
+   * 消耗 1 格当前单价（roadUnitPrice），与玩家同一套铺路规则。
+   */
+  enemyRoad() {
+    const S = this.state;
+    const price = this.roadUnitPrice('p2');
+    if (S.enemyRes.energy < price) return false;
+
+    let goal = S.enemyRoadGoal, path = S.enemyRoadPath;
+    // 没规划过 / 路径已走完 / 目标失效（资源点被己方占了）→ 重新锁定目标并规划
+    if (!goal || !path || !path.length || !this.roadGoalValid('p2', goal)) {
+      goal = this.pickRoadGoal('p2', true);
+      path = this.planRoadPath('p2', goal.cells);
+      S.enemyRoadGoal = goal;
+      S.enemyRoadPath = path;
+      if (!path.length) return false;    // 已推到半区边界（到不了更远）→ 本周期不铺，自然止住蔓延
+    }
+    const step = path[0];
+    if (!this.canPlaceRoad(step.gx, step.gy)) {   // 规划之后该格被占/地形变了 → 下周期重规划
+      S.enemyRoadPath = null;
+      return false;
+    }
     /* ★ 第四十六次修订：AI 也必须走 placeRoad（它原本直接写 S.roads，绕过了道路额度，
      *   额度对 AI 形同虚设 —— 和"AI 行军不耗粮"是同一类不对称 bug）。 */
-    if (!this.placeRoad(best.gx, best.gy, 'p2')) return false;
-    S.enemyRes.energy -= CFG.cards.roads.dirt.price;
+    if (!this.placeRoad(step.gx, step.gy, 'p2')) return false;
+    path.shift();
+    S.enemyRes.energy -= price;
     return true;
   },
 

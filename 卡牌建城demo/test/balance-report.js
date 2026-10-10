@@ -25,6 +25,7 @@ const acc = {
   endT: [], myB: [], enemyB: [], roads: [], resP1: [], resP2: [],
   castle2: [], castle3: [], castle5: [], firstTroop: [],
   enemyRoadT: [], p1RoadT: [], endHpMe: [], endHpEnemy: [],
+  roadP1: [], roadP2: [],
   lv5Me: [], lv5Enemy: [], lead5: [],
   discards: [], quest1: [], quest2: [], quest3: [],
   capP1: [], capP2: [], trained: [],
@@ -282,7 +283,10 @@ for (let g = 0; g < ROUNDS; g++) {
       ecHp: S().enemyCastle.hp, resP1: Object.keys(S().resourceOwner).filter(function (k) { return S().resourceOwner[k] === 'p1'; }).length,
     });
     if (t === 420) S().roadsAt420 = Object.keys(S().roads).length;
-    if (acc.firstTroop.length === 0 && Game.totalTroops('p1') > 0) acc.firstTroop.push(t);
+    /* ⚠️ 修（第四十七次修订）：旧写法 `acc.firstTroop.length === 0` 是**跨局**判断，
+     *   于是这个指标**只记录第一局**（样本=1），P50 完全是单局噪声 —— 实测同一份代码
+     *   不同批次能给出 29s / 79s / 99s / 1169s。改成用 state 上的临时字段，每局 reset 自动清空。 */
+    if (S()._ft === undefined && Game.totalTroops('p1') > 0) S()._ft = t;
     // 主城 Lv5 达成时刻（评估「发展胜利」路线会把对局压到多长）
     if (!lv5Me && S().castleLevel >= 5) lv5Me = t;
     if (!lv5Enemy && (S().enemyLevel || 1) >= 5) lv5Enemy = t;
@@ -293,6 +297,7 @@ for (let g = 0; g < ROUNDS; g++) {
     if (!q3 && S().questStar >= 3) q3 = t;
     if (S().result) break;                       // win / lose / draw 三种结局都收工
   }
+  acc.firstTroop.push(S()._ft === undefined ? WINDOW : S()._ft);
   acc.lv5Me.push(lv5Me || WINDOW);
   acc.lv5Enemy.push(lv5Enemy || WINDOW);
   acc.lead5.push(lead5 || WINDOW);
@@ -303,6 +308,9 @@ for (let g = 0; g < ROUNDS; g++) {
   acc.capP1.push(S().stats.capturedP1 || 0);
   acc.capP2.push(S().stats.capturedP2 || 0);
   acc.trained.push(S().stats.trained || 0);
+  /* 第四十七次修订：按方铺路数 —— 判断「总数下降」到底是 AI 侧降了还是两边都降 */
+  acc.roadP1.push(Game.roadCountOf('p1'));
+  acc.roadP2.push(Game.roadCountOf('p2'));
   // 第二十八次：能量收支（回应 GPT 意见——用正常局数据判断是否富余，而非失控长局）
   acc.endEnergy.push(Math.floor(S().res.energy));
   acc.endFood.push(Math.floor(S().res.food));
@@ -353,6 +361,7 @@ L.push('| 对局时长 | ' + P50(acc.endT) + 's |');
 L.push('| 终局主城等级（P50） | ' + P50(S_endLv) + ' |');
 L.push('| 7 分钟时道路总数 | ' + P50(acc.roads7) + '（此前版本约 250，用户报障点） |');
 L.push('| 首支部队 | ' + P50(acc.firstTroop) + 's |');
+L.push('| 道路（玩家 / AI）P50 | ' + P50(acc.roadP1) + ' / ' + P50(acc.roadP2) + ' 格 |');
 L.push('| 主城 Lv5 达成（我方 / 敌方 / 任一方） | ' + P50(acc.lv5Me) + 's / ' +
        P50(acc.lv5Enemy) + 's / ' + P50(acc.lead5) + 's |');
 L.push('| 一局累计弃牌 P50 / P90 | ' + P50(acc.discards) + ' / ' + P90(acc.discards) +

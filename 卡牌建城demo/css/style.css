@@ -24,8 +24,8 @@ html, body {
 
 #ui {
   position: absolute; left: 0; top: 0;
-  width: 1280px; height: 720px;
-  transform-origin: 0 0;
+  /* ★ 第四十八次修订：尺寸由引擎按窗口动态设置（响应式），不再固定 1280×720 */
+  width: 100%; height: 100%;
   pointer-events: none;
   display: flex; flex-direction: column;
   background: #0b1018;
@@ -86,7 +86,9 @@ html, body {
 /* ---------- 沙盘 ---------- */
 
 #board {
-  flex: 1 1 auto; position: relative; min-height: 300px;
+  flex: 1 1 auto; position: relative; min-height: 0;
+  /* ★ 第四十八次修订：min-height 300px 会在手机横屏（390px 高）把顶栏+手牌挤出屏幕；
+   *   改 0 交给 flex 分配 —— 桌面高度充裕时沙盘照样撑满，行为不变。 */
   border-radius: 12px; border: 1px solid #2d4426;
   background: #44692f;
   overflow: hidden;
@@ -1053,3 +1055,64 @@ html, body {
 #result-sub { font-size: 14px; margin-top: 10px; }
 .result-btns { margin-top: 24px; gap: 12px; }
 .result-btns #result-restart, .result-btn-ghost { padding: 11px 26px; font-size: 15px; }
+
+/* ==================== 响应式（第四十八次修订：手机横屏适配） ====================
+ * 逻辑尺寸已动态化（scale 恒 1），CSS px = 真实 px。
+ * 桌面（视口高 > 500px）维持原布局，零影响；矮屏（手机横屏 360~430px 高）压三行布局：
+ *   顶栏 36px · 沙盘吃满剩余空间 · 手牌栏 ~96px（卡片同缩、描述收起）· 常驻提示隐藏。
+ * 常驻提示的信息在「玩法说明」里都有，手机上不丢内容。 */
+@media (max-height: 500px) {
+  #topbar { flex: 0 0 36px; gap: 8px; padding: 0 8px; }
+  #tag-phase { display: none; }              /* 面包屑在手机上没有信息价值，还挤宽度 */
+  #policy-tray, #relic-tray { display: none; } /* 状态托盘：点「政策」按钮能看到，省 ~90px 宽 */
+  #btn-debug { display: none; }                /* 调参面板是开发工具，手机上无输入设备可用 */
+  #event-meter { display: none; }              /* 事件牌进度：触发时有弹窗提醒，进度条属次要信息 */
+  .res-item { flex: 0 0 auto; }
+  .res-item i, .res-item b, .res-item em { white-space: nowrap; }
+  .tb-sub { font-size: 9px; }
+  #hint { display: none; }
+  .tag { padding: 3px 6px; }
+  .tb-btn { font-size: 11px; padding: 4px 9px; }
+  .res-item { padding: 3px 8px 3px 7px; }
+  #hand-bar { min-height: 96px; padding: 4px 8px; gap: 2px; }
+  /* ⚠️ 必须用 #hand-slots .card —— 511 行的同名规则带 id、特异性更高，裸 .card 会被盖掉；
+   *   且那条规则还有 min-height:156px，不一起清掉 height:86 会被顶回去 */
+  #hand-slots .card { width: 106px; height: 86px; min-height: 0; padding: 6px 8px; flex: 0 0 106px; }
+  #hand-slots .card-icon { font-size: 20px; }
+  #hand-slots .card-name { font-size: 11px; }
+  #hand-slots .card-cost { font-size: 9px; }
+  #hand-slots .card-desc { display: none; }  /* 卡面描述塞不下，玩法说明里有全量 */
+  .rh-title { font-size: 11px; }
+}
+
+/* ---------- 第二档：窄矮屏（iPhone SE 667×375 这一级）再压一层 ---------- */
+@media (max-height: 500px) and (max-width: 720px) {
+  #tag-slots { display: none; }              /* 建筑位上限：沙盘标题栏的「可建 N 格」已覆盖 */
+  .tag { font-size: 10px; padding: 2px 5px; }
+  .tb-btn { font-size: 10px; padding: 3px 7px; }
+  .tb-clock #clock { font-size: 16px; }
+  .tb-clock .tb-sub { font-size: 8px; }
+  .res-item b { font-size: 14px; }
+}
+
+/* ---------- 安全区（第四十八次修订） ----------
+ * viewport-fit=cover 已在 meta 里开启；这里把刘海/圆角屏的 inset 让出来。
+ * 桌面上 env() 恒为 0，零影响。#ui 是 flex column，padding 会把三行内容整体往里推。 */
+#ui {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---------- 竖屏引导（第四十八次修订） ---------- */
+#rotate-hint {
+  position: fixed; inset: 0; z-index: 9999;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; background: #0a0f16; color: #e8eef8; text-align: center;
+  user-select: none;
+}
+#rotate-hint .rh-icon { font-size: 54px; }
+#rotate-hint .rh-text { font-size: 18px; line-height: 1.8; }
+#rotate-hint .rh-text span { font-size: 13px; color: #6d84a3; }
+@media (orientation: portrait) and (max-width: 820px) {
+  #rotate-hint { display: flex; }
+}

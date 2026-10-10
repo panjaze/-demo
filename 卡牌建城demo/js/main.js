@@ -158,12 +158,25 @@ function boot() {
   Sandbox.init();
   UI.init();
   Menu.init();          // 主界面（第四十二次修订）
+
+  /* ★ 第四十八次修订：URL 带 ?play=1 时跳过主界面直入对局 ——
+   *   无头截图 / 回归测试需要不点鼠标就能看到游戏内画面；正常入口不受影响。
+   *   两个坑：① #menu 在 HTML 里初始就是可见的（无 hidden class），跳过 show() 还不够，
+   *   必须主动 hide()；② 这个分支必须放在首次 UI.render() 之前 ——
+   *   否则开局政策弹窗已经画出来，再清 offer 也晚了。 */
+  if (/[?&#]play=1/.test(global.location.href)) {
+    Menu.hide();
+    /* 别让开局弹窗挡住要验收的布局：offer 是数据、弹窗是 DOM —— 两处都要清
+     * （offerPolicy 在发牌时就直接把 modal DOM 顶出来了，光清数据没用）。 */
+    if (Game.state.policy) Game.state.policy.p1.offer = null;
+    if (global.UI && UI.setModal) UI.setModal(null);
+  } else {
+    Game.state.paused = true;
+    Menu.show();
+  }
+
   UI.render();
   Sandbox.resize();
-
-  /* 开局先进主界面：暂停游戏时钟，实时沙盘当主界面背景（零素材） */
-  Game.state.paused = true;
-  Menu.show();
 
   Engine.run(scene);
 

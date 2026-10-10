@@ -47,40 +47,46 @@
   }
 
   function resize() {
-    const host = (stageEl && stageEl.parentElement) || document.body;
-    const cw = host.clientWidth || global.innerWidth;
-    const ch = host.clientHeight || global.innerHeight;
-    scale = Math.min(cw / W, ch / H);
+    /* ★ 第四十八次修订：响应式改造（手机横屏适配 · 第三档）
+     * 旧版：固定逻辑 1280×720 + #ui 整体 transform:scale —— 手机横屏（844×390）会缩到 0.54，
+     *   11px 的字渲染成 6px、手牌栏直接被挤出屏幕外。
+     * 新版：逻辑尺寸 = 视口尺寸、scale 恒为 1 —— CSS 里的 px 就是真实 px，
+     *   字号与触摸目标不再被缩小；沙盘（Sandbox.resize）本来就按容器渲染，自动跟随。
+     * 矮屏下的布局压缩交给 CSS（clamp / 媒体查询），不在这里缩。
+     * ⚠️ 尺寸来源必须是**视口**（innerWidth/innerHeight），不能读 host 的 clientWidth：
+     *   #app 的高度是 100dvh，而 #stage/#ui 的高度又由这里设置 —— 读 host 会形成
+     *   "高度由内容决定、内容又由高度决定"的循环依赖，实测直接把布局挤崩。 */
+    const cw = global.innerWidth;
+    const ch = global.innerHeight;
+
+    W = Math.max(320, Math.round(cw));
+    H = Math.max(240, Math.round(ch));
+    scale = 1;
     dpr = Math.min(global.devicePixelRatio || 1, 2);   // 上限 2，避免超高 dpr 拖垮性能
 
-    const cssW = Math.round(W * scale);
-    const cssH = Math.round(H * scale);
+    stageEl.style.width = W + 'px';
+    stageEl.style.height = H + 'px';
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
 
-    stageEl.style.width = cssW + 'px';
-    stageEl.style.height = cssH + 'px';
-    canvas.style.width = cssW + 'px';
-    canvas.style.height = cssH + 'px';
-    canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-
-    // UI 层用逻辑坐标布局后整体缩放，保证与 canvas 像素级对齐
+    // UI 层与窗口同尺寸（不再整体缩放），CSS 的 px 即真实 px
     uiEl.style.width = W + 'px';
     uiEl.style.height = H + 'px';
-    uiEl.style.transformOrigin = '0 0';
-    uiEl.style.transform = 'scale(' + scale + ')';
+    uiEl.style.transform = 'none';
 
-    // 主界面覆盖层（#menu，第四十二次修订）：同样用逻辑坐标 + 整体缩放，
-    // 且它住在 #stage 下、z-index 高于 #modal，所以弹窗不会盖在主界面上。
+    // 主界面覆盖层（#menu，第四十二次修订）：与 #ui 同步响应式
     menuEl = menuEl || document.getElementById('menu');
     if (menuEl) {
       menuEl.style.width = W + 'px';
       menuEl.style.height = H + 'px';
-      menuEl.style.transformOrigin = '0 0';
-      menuEl.style.transform = 'scale(' + scale + ')';
+      menuEl.style.transform = 'none';
     }
 
-    baseA = (cssW * dpr) / W;
-    baseD = (cssH * dpr) / H;
+    // canvas 绘制变换：逻辑 px → 物理像素（scale 恒 1 后就只剩 dpr）
+    baseA = dpr;
+    baseD = dpr;
   }
 
   /* ---------------- 主循环 ---------------- */

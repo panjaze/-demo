@@ -65,7 +65,7 @@
             <span class="bh-right">
               <button id="btn-recenter" class="bh-btn">⌖ 回城</button>
               <span class="muted">可建 <b id="slot-count">0</b>/<b id="slot-max">10</b> 格</span>
-              <span class="muted" id="road-budget" title="道路额度：每方主动铺路的格数上限（预设官道、桥不占额度）。铺满后要拆掉旧路才能继续铺。">道路 <b id="road-count">0</b>/<b id="road-cap">90</b></span>
+              <span class="muted" id="road-budget" title="道路额度：每方主动铺路的格数上限（预设官道、桥不占额度）。铺满后要拆掉旧路才能继续铺。单价随已铺格数递增（每 20 格 +1⚡）。">道路 <b id="road-count">0</b>/<b id="road-cap">100</b> <b id="road-price"></b></span>
             </span>
           </div>
 
@@ -208,6 +208,13 @@
     </div>
     <div id="dbg-body"></div>
   </div>
+</div>
+
+<!-- 竖屏引导（第四十八次修订）：手机竖屏时提示横屏；桌面（宽 > 820px）不受影响。
+     纯 CSS 控制（媒体查询），无 JS 参与 -->
+<div id="rotate-hint">
+  <div class="rh-icon">📱</div>
+  <div class="rh-text">请将手机<b>横过来</b>游玩<br><span>本作为横屏设计 · 1v1 沙盘战场需要横向空间</span></div>
 </div>
 
 <!-- 顺序不能改：engine -> config -> game -> sandbox -> ui -> menu -> main -->
