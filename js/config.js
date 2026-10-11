@@ -616,7 +616,7 @@ var CFG = {
       none:   { name: '程序化草地',     src: '',                              bakedGrid: false },
       final:  { name: '终版手绘图(原)', src: 'assets/map/plate-final.png',    bakedGrid: false },
       retex:  { name: '终版·官道变旧径', src: 'assets/map/plate-retex.png',   bakedGrid: false },
-      vivid:  { name: '终版·画面优化',   src: 'assets/map/plate-vivid.png',   bakedGrid: false },
+      vivid:  { name: '终版·画面优化',   src: 'assets/map/plate-vivid.jpg',   bakedGrid: false },
       a:      { name: 'A 欧陆棋盘',     src: 'assets/map/plate-a.png',        bakedGrid: true },
       b:      { name: 'B 率土土地',     src: 'assets/map/plate-b.png',        bakedGrid: true },
       c:      { name: 'C 综合版',       src: 'assets/map/plate-c.png',        bakedGrid: true },
@@ -665,7 +665,7 @@ var CFG = {
       fill: '#8a7355', edge: '#6b5840', core: '#9d8466', rut: '#6d5941',
       /** 官道开垦素材（底图同尺寸透明层，只在官道格有像素），生成脚本见
        *  图片素材/美术风格测试/make_road_reclaim.py */
-      reclaimSrc: 'assets/map/road-reclaim.png',
+      reclaimSrc: 'assets/map/road-reclaim.jpg',
       /** 建筑入口小路（与官道同色系，压淡后融进地图） */
       stub: '#b09a68',
       /**
