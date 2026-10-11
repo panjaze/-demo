@@ -375,8 +375,8 @@
       "cell": "14,8",
       "kind": "shoulder",
       "delta": 1,
-      "before": "40,43,36",
-      "after": "40,42,35"
+      "before": "74,55,39",
+      "after": "73,55,38"
     },
     {
       "cell": "14,8",
@@ -430,9 +430,9 @@
     {
       "cell": "15,7",
       "kind": "shoulder",
-      "delta": 1,
-      "before": "166,148,72",
-      "after": "165,148,72"
+      "delta": 2,
+      "before": "44,52,34",
+      "after": "43,51,33"
     },
     {
       "cell": "15,7",
