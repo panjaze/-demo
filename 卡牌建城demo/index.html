@@ -242,5 +242,22 @@
 <script src="js/menu.js"></script>
 <script src="js/tutorial.js"></script>
 <script src="js/main.js"></script>
+<script>
+/* 竖屏提示双保险（第七十五次修订）：微信 X5/XWeb 内核对 orientation 媒体查询的
+ * 旋转响应不可靠（用户实机：转横屏后提示不消失）。JS 监听 resize 显式控制显隐，
+ * 内联样式优先级高于 CSS 媒体查询；桌面（宽 > 820px）不受影响。 */
+(function () {
+  var el = document.getElementById('rotate-hint');
+  if (!el) return;
+  function sync() {
+    var portrait = window.innerHeight > window.innerWidth;
+    var narrow = window.innerWidth <= 820;
+    el.style.display = (portrait && narrow) ? 'flex' : 'none';
+  }
+  window.addEventListener('resize', sync);
+  window.addEventListener('orientationchange', sync);
+  sync();
+})();
+</script>
 </body>
 </html>
