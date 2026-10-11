@@ -98,6 +98,13 @@ const Sandbox = {
       img.onerror = () => { /* 加载失败 → 该建筑永久降级为 emoji，不重试 */ };
       img.src = CFG.assets.dir + CFG.assets.files[k];
     });
+    /* ★ 第七十二次修订：木纹贴图 —— 地图信息牌与顶栏同源（createPattern 平铺） */
+    this.woodImg = null;
+    {
+      const wi = new global.Image();
+      wi.onload = () => { this.woodImg = wi; };
+      wi.src = 'assets/ui/topbar/topbar-wood-tile.png';
+    }
     /* ★ 第七十一次修订：资源点据点素材（透明底 PNG，缺失时降级 emoji） */
     this.resSprites = {};
     const RC = CFG.resourceCamps;
@@ -1325,12 +1332,75 @@ const Sandbox = {
   },
 
   /** 地图文字标签（最后绘制 + 深色底板）：保证不被建筑/部队盖住（用户报障：遮挡） */
+  /**
+   * ★ 第七十二次修订：地图信息牌（参考率土/三战的"深色薄片+归属色+等级数字"，
+   *   但材质用我们自己的木纹 + 金色内线，与顶栏/按钮同一套视觉语言）。
+   * 形状：两端缎带切口；归属 = 金色(我方)/红色(敌方)/米白(中立) 内线 + 文字色。
+   */
+  drawBannerPlate(ctx, cx, topY, w, h, owner) {
+    const notch = Math.min(h * 0.42, 9);
+    const x = cx - w / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + notch, topY);
+    ctx.lineTo(x + w - notch, topY);
+    ctx.lineTo(x + w, topY + h * 0.5);
+    ctx.lineTo(x + w - notch, topY + h);
+    ctx.lineTo(x + notch, topY + h);
+    ctx.lineTo(x, topY + h * 0.5);
+    ctx.closePath();
+    if (this.woodImg) {
+      ctx.fillStyle = ctx.createPattern(this.woodImg, 'repeat');
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#6b5230';
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(12,8,3,0.38)';       // 轻压木纹：纹理可见，文字仍清晰
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(22,13,4,0.95)'; ctx.lineWidth = Math.max(1.5, h * 0.10);
+    ctx.stroke();                              // 深色外框
+    ctx.strokeStyle = owner === 'p1' ? 'rgba(255,214,90,.95)'
+                    : owner === 'p2' ? 'rgba(255,150,140,.9)'
+                    : 'rgba(236,212,158,.8)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();                              // 归属色内线
+    /* 两端缎带切口尖上各一颗金铆钉 —— 精致度的小细节 */
+    ctx.fillStyle = '#ffd98a';
+    [[x + notch, topY + h / 2], [x + w - notch, topY + h / 2]].forEach(function (p) {
+      ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(1.2, h * 0.07), 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
+  },
+
   drawMapLabels(ctx, T) {
     const G = global.Game;
     if (!G || !G.state) return;
+    const self = this;                            // forEach 回调里要用 this.drawBannerPlate
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '700 ' + Math.round(T * 0.2) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+    /* ★ 第七十二次修订：建筑/主城也补上名牌（此前贴图路径只有 Lv 角标没有名称，
+     *   率土/三战的地图上每个对象都标名称 + 等级） */
+    const bFont = '"PingFang SC","Microsoft YaHei",sans-serif';
+    const drawBuildPlate = function (b, name, level, owner) {
+      const fp = G.footOf(b.type);
+      const cx = (b.gx + fp.w / 2) * T, topY = (b.gy + fp.h) * T + T * 0.06;
+      const txt = level ? name + '  Lv' + level : name;
+      ctx.font = '700 ' + Math.round(T * 0.21) + 'px ' + bFont;
+      const w = Math.max(70, ctx.measureText(txt).width) + T * 0.34;
+      const h = T * 0.36;
+      this.drawBannerPlate(ctx, cx, topY, w, h, owner);
+      ctx.fillStyle = owner === 'p1' ? '#ffd76a' : (owner === 'p2' ? '#ff9c9c' : '#f4f1e4');
+      ctx.fillText(txt, cx, topY + h * 0.62);
+    };
+    for (const k in G.state.buildings) {
+      const b = G.state.buildings[k];
+      drawBuildPlate.call(this, b, CFG.buildings[b.type].name, b.level, (b.owner || 'p1') === 'p1' ? 'p1' : 'p2');
+    }
+    drawBuildPlate.call(this, G.state.castle, '主城', G.state.castleLevel, 'p1');
+    drawBuildPlate.call(this, G.enemyCastle(), '敌方主城', 1, 'p2');
+
     CFG.map.resources.forEach(function (r) {
       const owner = G.resourceOwnerOf(r);
       // 未占领的资源点显示剩余守军——否则玩家不知道派兵过去为什么没效果
@@ -1341,20 +1411,16 @@ const Sandbox = {
         : ('+' + r.yield + (r.res === 'food' ? ' 粮/Tick' : ' ⚡/Tick'));
       const l1 = (owner ? (owner === 'p1' ? '★ ' : '✖ ') : '') + r.name;
       const l2 = yieldTxt + (!owner && guard > 0 ? ' · 守军' + guard : '');
-      const x = (r.gx + 0.5) * T, y = (r.gy + 1.02) * T;
+      const x = (r.gx + 0.5) * T, y = (r.gy + 1.00) * T;
       ctx.font = '700 ' + Math.round(T * 0.20) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
-      const w = Math.max(64, ctx.measureText(l1).width, ctx.measureText(l2).width) + 14;
-      const h = T * 0.52;
-      ctx.fillStyle = 'rgba(6,10,16,0.78)';
-      ctx.fillRect(x - w / 2, y - T * 0.16, w, h);
-      ctx.strokeStyle = owner === 'p1' ? 'rgba(255,210,63,.55)' : (owner === 'p2' ? 'rgba(255,138,138,.5)' : 'rgba(255,255,255,.28)');
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x - w / 2 + 0.5, y - T * 0.16 + 0.5, w - 1, h - 1);
-      ctx.fillStyle = owner === 'p1' ? '#ffd23f' : (owner === 'p2' ? '#ff8a8a' : '#f2f6ff');
-      ctx.fillText(l1, x, y);
+      const w = Math.max(76, ctx.measureText(l1).width, ctx.measureText(l2).width) + T * 0.30;
+      const h = T * 0.54;
+      self.drawBannerPlate(ctx, x, y - T * 0.17, w, h, owner);
+      ctx.fillStyle = owner === 'p1' ? '#ffd76a' : (owner === 'p2' ? '#ff9c9c' : '#f4f1e4');
+      ctx.fillText(l1, x, y + T * 0.03);
       ctx.font = Math.round(T * 0.18) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
-      ctx.fillStyle = '#dfe8f4';
-      ctx.fillText(l2, x, y + T * 0.21);
+      ctx.fillStyle = '#e8dcc0';
+      ctx.fillText(l2, x, y + T * 0.24);
     });
     ctx.restore();
   },

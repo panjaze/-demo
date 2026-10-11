@@ -6,9 +6,9 @@ const { chromium } = require('playwright-core');
 const CHROME = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const DIR = 'D:/工程/自研/卡牌建城demo/';
 const JOBS = [
-  { src: 'assets/map/_src-camp-food.png',      out: 'assets/map/camp-food.png' },
-  { src: 'assets/map/_src-camp-energy.png',    out: 'assets/map/camp-energy.png' },
-  { src: 'assets/map/_src-camp-logistics.png', out: 'assets/map/camp-logistics.png' },
+  { src: 'assets/map/_src2-camp-food.png',      out: 'assets/map/camp-food.png' },
+  { src: 'assets/map/_src2-camp-energy.png',    out: 'assets/map/camp-energy.png' },
+  { src: 'assets/map/_src2-camp-logistics.png', out: 'assets/map/camp-logistics.png' },
 ];
 const TH = 42, ERODE = 2, OUT_H = 192;
 (async () => {

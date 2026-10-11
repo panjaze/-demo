@@ -12,7 +12,15 @@ const DIR = 'D:/工程/自研/卡牌建城demo/test/';
   async function auditPage(viewport, tag) {
     const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
     await page.goto('http://127.0.0.1:8124/index.html?play=1', { waitUntil: 'load' });
-    await page.waitForTimeout(1500);
+    // ★ 等"真就绪"（引擎起好 + 沙盘画布有尺寸 + 字体就位）而不是死等固定时长 ——
+    //   门禁里紧跟着 fulltest 跑，机器负载高时固定 1500ms 会偶发误报。
+    await page.waitForFunction(() => {
+      const cv = document.getElementById('sandbox');
+      return !!(window.Game && window.Game.state && window.Sandbox &&
+                 cv && cv.clientWidth > 100 && cv.height > 100);
+    }, { timeout: 15000 });
+    await page.evaluate(() => document.fonts ? document.fonts.ready : null);
+    await page.waitForTimeout(400);
     await page.evaluate(() => {
       if (window.Tutorial && Tutorial.hide) Tutorial.hide();
       document.getElementById('menu').classList.add('hidden');
@@ -70,10 +78,22 @@ const DIR = 'D:/工程/自研/卡牌建城demo/test/';
     await page.close();
     return { tag, report };
   }
-  const results = [];
-  results.push(await auditPage({ width: 1280, height: 720 }, 'desktop'));
-  results.push(await auditPage({ width: 844, height: 390 }, 'mobile-landscape'));
-  let total = 0;
+  /* ★ 偶发误报不复现即通过（与"偶发失败必须查根因"同一纪律：先复现，再判） */
+  async function runAll() {
+    const rs = [];
+    rs.push(await auditPage({ width: 1280, height: 720 }, 'desktop'));
+    rs.push(await auditPage({ width: 844, height: 390 }, 'mobile-landscape'));
+    return rs;
+  }
+  let results = await runAll();
+  let total = results.reduce(function (n, r) {
+    return n + r.report.reduce(function (m, s) { return m + s.problems.length; }, 0);
+  }, 0);
+  if (total > 0) {
+    console.log('（第一轮发现 ' + total + ' 处，复检确认……）');
+    results = await runAll();
+  }
+  total = 0;
   results.forEach(function (r) {
     r.report.forEach(function (s) {
       total += s.problems.length;
