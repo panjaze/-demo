@@ -985,19 +985,29 @@ const Sandbox = {
     G.troopTiles().forEach((t) => {
       const cx = (t.gx + 0.5) * T, cy = (t.gy + 0.5) * T;
       const both = t.p1 > 0 && t.p2 > 0;
-      const badge = (n, side, dx, hide) => {
+      const stranded1 = t.p1 > 0 && G.isStrandedTroops(t.gx, t.gy, 'p1');
+      const stranded2 = t.p2 > 0 && G.isStrandedTroops(t.gx, t.gy, 'p2');
+      const badge = (n, side, dx, hide, stranded) => {
         if (n <= 0 || hide) return;
         const col = side === 'p1' ? COL.p1 : COL.p2;
         const r = T * 0.3;
         ctx.beginPath(); ctx.arc(cx + dx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(8,14,22,0.92)'; ctx.fill();
-        ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+        /* ★ 滞留待命（软处理 2026-10-11）：虚线描边 + 「待命」小字，提示这支部队暂时调不动 */
+        if (stranded) ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = col; ctx.lineWidth = stranded ? 2 : 3; ctx.stroke();
+        ctx.setLineDash([]);
         ctx.fillStyle = '#fff';
         ctx.font = '700 ' + Math.round(T * 0.27) + 'px system-ui, sans-serif';
         ctx.fillText(String(n), cx + dx, cy + T * 0.02);
+        if (stranded) {
+          ctx.fillStyle = 'rgba(255,255,255,0.72)';
+          ctx.font = '600 ' + Math.round(T * 0.15) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+          ctx.fillText('待命', cx + dx, cy + T * 0.42);
+        }
       };
-      badge(t.p1, 'p1', both ? -T * 0.2 : 0, !!skip[t.gx + ',' + t.gy]);
-      badge(t.p2, 'p2', both ? T * 0.2 : 0, false);
+      badge(t.p1, 'p1', both ? -T * 0.2 : 0, !!skip[t.gx + ',' + t.gy], stranded1);
+      badge(t.p2, 'p2', both ? T * 0.2 : 0, false, stranded2);
     });
   },
 
@@ -1406,19 +1416,30 @@ const Sandbox = {
       // 未占领的资源点显示剩余守军——否则玩家不知道派兵过去为什么没效果
       const guard = G.state.resGuard[r.gx + ',' + r.gy] || 0;
       /* ★ 第七十一次修订（方案A）：底牌升级为「收益牌」—— 名称 / 产出 / 守军 三件事一眼看全。
-       *   新玩家不知道"占了有什么好处"正是资源点无吸引力的原因之一。 */
+       *   新玩家不知道"占了有什么好处"正是资源点无吸引力的原因之一。
+       * ★ 第七十三次修订（排查 2026-10-11 后用户拍板收窄）：产出去掉「/Tick」（速览牌，
+       *   Tick 概念在玩法说明与引导步里讲过）、守军简写「守10」—— 旧版
+       *   「+50 粮/Tick · 守军10」把牌撑到 ~2.5 格宽、横跨邻格压住官道路基地界
+       *   （实锤：中央能源点的牌盖住 (15.5,8.0)，_roadvisual_verify 两项格缝断言被误伤）。
+       *   同时修掉 measureText(l2) 误用 l1 大字号的既有问题（牌宽被高估）。 */
       const yieldTxt = r.res === 'logistics' ? '自动铺路'
-        : ('+' + r.yield + (r.res === 'food' ? ' 粮/Tick' : ' ⚡/Tick'));
+        : ('+' + r.yield + (r.res === 'food' ? '粮' : '⚡'));
       const l1 = (owner ? (owner === 'p1' ? '★ ' : '✖ ') : '') + r.name;
-      const l2 = yieldTxt + (!owner && guard > 0 ? ' · 守军' + guard : '');
+      const l2 = yieldTxt + (!owner && guard > 0 ? ' · 守' + guard : '');
       const x = (r.gx + 0.5) * T, y = (r.gy + 1.00) * T;
-      ctx.font = '700 ' + Math.round(T * 0.20) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
-      const w = Math.max(76, ctx.measureText(l1).width, ctx.measureText(l2).width) + T * 0.30;
+      const font1 = '700 ' + Math.round(T * 0.20) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      const font2 = Math.round(T * 0.18) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.font = font1;
+      const w1 = ctx.measureText(l1).width;
+      ctx.font = font2;
+      const w2 = ctx.measureText(l2).width;
+      const w = Math.min(T * 1.8, Math.max(76, w1, w2) + T * 0.30);
       const h = T * 0.54;
       self.drawBannerPlate(ctx, x, y - T * 0.17, w, h, owner);
       ctx.fillStyle = owner === 'p1' ? '#ffd76a' : (owner === 'p2' ? '#ff9c9c' : '#f4f1e4');
+      ctx.font = font1;
       ctx.fillText(l1, x, y + T * 0.03);
-      ctx.font = Math.round(T * 0.18) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.font = font2;
       ctx.fillStyle = '#e8dcc0';
       ctx.fillText(l2, x, y + T * 0.24);
     });

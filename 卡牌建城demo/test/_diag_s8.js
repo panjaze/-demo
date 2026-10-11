@@ -31,6 +31,10 @@ const tileXY = (page, gx, gy) => page.evaluate(([x, y]) => {
     await page.waitForTimeout(1400);
     await page.evaluate(() => { if (window.Menu) Menu.start(true); });
     await page.waitForTimeout(900);
+    /* ★ 排查 2026-10-11：补新手引导跳过 —— §28 的引导选择界面（全屏遮罩）出现即暂停
+     *   （Game.update 直接 return），且遮罩挡住拖拽 → 本脚本曾因此 20/20 全灭（发兵=[]、兵=0），
+     *   与 fulltest 复活时补的是同款修复（§38）。 */
+    await page.evaluate(() => { if (window.Tutorial) Tutorial.choose(false); });
     /* ⚠️ 必须清掉开局的政策三选一弹窗：它盖在沙盘上，鼠标拖拽根本到不了 canvas（我第一版漏了这步，
      *   20 轮全失败、发兵=[]，纯属诊断脚本自己的锅）。fulltest 里是 S1 先颁布政策，所以没这个问题。 */
     await page.evaluate(() => {

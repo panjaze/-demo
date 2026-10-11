@@ -422,7 +422,9 @@ const UI = {
     if (mine > 0) {
       Game.selectTile(gx, gy);
       Engine.audio.click();
-      UI.hint('已选中 ' + mine + ' 个士兵 · 点地图上有 ★ 蓝点的建筑派他们过去');
+      UI.hint(Game.isStrandedTroops(gx, gy, 'p1')
+        ? '部队待命中 · 这块草地没有道路连接：沿路修到这里（或重新颁布「野战行军」）后即可调遣'
+        : '已选中 ' + mine + ' 个士兵 · 点地图上有 ★ 蓝点的建筑派他们过去');
       UI.render();
       return;
     }

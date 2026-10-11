@@ -1490,6 +1490,18 @@ const Game = {
     return true;
   },
 
+  /**
+   * 部队是否「滞留待命」（2026-10-11 用户拍板的软处理）：站在本方不可通行格上
+   * （典型场景：野战行军失效后停在草地）且不在行军中 → 无法被调遣。
+   * 判定对双方对称；UI 用它把误导性的"点 ★ 蓝点派兵"提示换成待命说明。
+   */
+  isStrandedTroops(gx, gy, side) {
+    const s = side || 'p1';
+    if (this.troopsAt(gx, gy)[s] <= 0) return false;
+    if (this.isMarchOccupied(gx, gy, s)) return false;
+    return !this.walkable(gx, gy, s);
+  },
+
   inMap(gx, gy) {
     return gx >= 0 && gy >= 0 && gx < CFG.map.cols && gy < CFG.map.rows;
   },
@@ -1621,6 +1633,12 @@ const Game = {
      * 否则提示写着"预计耗粮 84🌾"、实际只走了 3 格就停，属于提示说谎（踩坑 #16）。 */
     const affordLegs = Math.floor(S.res.food / Math.max(0.0001, perTile));
 
+    /* ★ 派出即离格（与 AI 派兵 updateEnemy 同一口径）：兵从起点格清走、只记在 march 里。
+     *   旧版兵留格上 + march 双份记账 → 派出瞬间 activeTroops 双计（实测 20→40），
+     *   兵营产出被上限误裁、起点格渲染出第二份兵，且出发点 1.6s 内被交战时走格按快照
+     *   搬运会凭空补兵。selftest 15m 的 marchOut 一直按"清格"口径构造（注释写明
+     *   「与 orderMoveFrom 等价」）—— 这里把实现补齐到测试假设的样子。 */
+    this.setTroops(ax, ay, 'p1', 0);
     S.march.push({ side: 'p1', n: n, path: path, idx: 0, t: 0, spent: 0 });
     S.sel = null;
     this.log('部队出发 → ' + this.tileName(gx, gy) +
@@ -1657,6 +1675,11 @@ const Game = {
         const cost = this.moveFoodCost(m.n, m.side);
         if (res.food < cost) {
           if (m.side === 'p1') this.log('粮食不足，部队在 ' + this.tileName(from.gx, from.gy) + ' 停止行军');
+          /* ★ 修复「AI 兵力蒸发」（排查 2026-10-11）：「派出即离格」口径下，idx=0 粮尽停军
+           *   时兵只记在 m.n、起点格已被清空，不落回格子就是凭空蒸发
+           *   （实测 AI 一局训练 2620 兵终局只剩 21，408 波 96% 粮尽）。idx≥1 的兵
+           *   已随上一格搬运落在当前格，不能再加（会翻倍）。 */
+          if (m.idx === 0) this.addTroops(from.gx, from.gy, m.side, m.n);
           alive = false;
           break;
         }
@@ -1715,6 +1738,10 @@ const Game = {
       const c = m.path[m.idx];
       if (!c || c.gx !== gx || c.gy !== gy) continue;
       n += m.n;
+      /* ★ 「派出即离格」口径下，idx=0 的兵只记在 m.n、不在任何格子上（起点已清），
+       *   落地必须真的放回格子，否则对它重新下令会得到 notroop。
+       *   idx≥1 的兵已随上一格搬运落在当前格，不能再加（会翻倍）。 */
+      if (m.idx === 0) this.addTroops(gx, gy, side, m.n);
       S.march.splice(i, 1);
     }
     return n;
@@ -1755,6 +1782,9 @@ const Game = {
     if ((S.resGuard[key] || 0) > 0) return null;      // 守军未清空，不能占领
     if (t.p1 > 0 && t.p2 === 0 && S.resourceOwner[key] !== 'p1') {
       S.resourceOwner[key] = 'p1';
+      /* ★ 占领后守军恢复满值 —— 与 p2 分支对称（防反复易手对双方同样生效）。
+       *   旧版只给 AI 恢复，导致 AI 夺回玩家占的点 1 兵免费、玩家夺回 AI 占的点要清 10 守军。 */
+      S.resGuard[key] = CFG.hp.resourceGuard;
       S.stats.resourceCaptures = (S.stats.resourceCaptures || 0) + 1;   // §21 任务：累计占领次数
       // 遗物「开疆旗」（行为转化型）：每占领一次资源点立即 +5⚡
       const vanguard = this.relicCount('p1', 'vanguard') * CFG.relics.vanguard.val;
@@ -1877,7 +1907,9 @@ const Game = {
     if (r) {
       const k = this.tileKey(gx, gy);
       const guard = S.resGuard[k] || 0;
-      if (guard > 0) {
+      /* ★ 守军只对「非占领方」结算：占领后守军恢复满值是防**对方**反抢的（双方对称），
+       *   己方部队路过自家资源点不应打自家守军（自相残杀）。中立点（无归属）双方都可打。 */
+      if (guard > 0 && S.resourceOwner[k] !== side) {
         const mul = this.statMul(side, 'guardDmg');
         const dmg = n * mul;                              // 对守军的总伤害
         if (dmg >= guard) {
@@ -1994,6 +2026,11 @@ const Game = {
     /* ★ 遗物「商队契约 / 税吏印 / 粮仓」对 AI 同样生效（与玩家 applyTick 的 statAdd 对称） */
     er.energy += this.statAdd('p2', 'energyTick');
     er.food += this.statAdd('p2', 'foodTick');
+    /* ★ 方案 B（用户拍板 2026-10-11）：与玩家侧 applyTick 的「资源永不为负」不变量对齐。
+     *   玩家侧 2026-09-26 就有这道闸（实机复现过 -56⚡），AI 侧漏了 —— 事件牌（苛捐
+     *   -4⚡/Tick）把净收入打成负数时 AI 会一路负债到 -213、整局瘫痪（§35 的 40 种子
+     *   量化）。政策侧已由 aiPickPolicy 先算账挡住（§36），这里是 Tick 收支的最终闸门。 */
+    er.energy = Math.max(0, er.energy);
   },
 
   /** 敌方兵营产兵（与玩家 trainAll 同一套表：从兵营格出兵、耗粮、受相邻农田加成） */

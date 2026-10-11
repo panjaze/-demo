@@ -429,7 +429,9 @@ for (let i = 0; i < Math.ceil(ord.legs * CFG.soldier.marchSecPerTile) + 3; i++) 
 ok('行军结束（march 清空）', S().march.length === 0, S().march.length);
 ok('12 兵清 10 守军后剩 2 兵抵达', Game.troopsAt(mine.gx, mine.gy).p1 === 2,
    Game.troopsAt(mine.gx, mine.gy));
-ok('守军已被清空', S().resGuard[Game.tileKeyOf(mine.gx, mine.gy)] === 0);
+ok('守军已被清空（占领后恢复满值，防反复易手，双方对称）',
+   S().resGuard[Game.tileKeyOf(mine.gx, mine.gy)] === CFG.hp.resourceGuard,
+   S().resGuard[Game.tileKeyOf(mine.gx, mine.gy)]);
 ok('起点已清空', Game.troopsAt(start10.gx, start10.gy).p1 === 0);
 ok('行军消耗了粮食', foodB - S().res.food >= ord.legs, { 耗粮: foodB - S().res.food, 格数: ord.legs });
 ok('抵达后占领了矿点', Game.resourceOwnerOf(mine) === 'p1');
@@ -500,6 +502,61 @@ for (let i = 0; i < 200 && S().march.length; i++) Game.updateMarch(1);
 ok('粮尽后停军（march 清空）', S().march.length === 0, S().march.length);
 ok('★ 停军不丢兵（兵留在格上，不是凭空消失）',
    Game.totalTroops('p1') === beforeStop, { 前: beforeStop, 后: Game.totalTroops('p1') });
+
+/* ---------- 10f. 派出即离格（排查 2026-10-11 回归）：派出瞬间账本不双计 ----------
+ * 旧版 orderMoveFrom 不清起点格：兵既在格上又在 march 里 → activeTroops 双计（实测 20→40），
+ * 兵营产出被上限误裁、渲染出两份兵。 */
+head('10f 派出即离格');
+Game.reset(); rich();
+{
+  const star = { gx: CASTLE().gx, gy: CASTLE().gy - 1 };
+  Game.placeRoad(star.gx, star.gy);
+  layRoadTo(star.gx, star.gy, CFG.map.resources[0].gx, CFG.map.resources[0].gy);
+  Game.addTroops(star.gx, star.gy, 'p1', 20);
+  const r10f = Game.orderMoveFrom(star.gx, star.gy, CFG.map.resources[0].gx, CFG.map.resources[0].gy);
+  ok('派出成功', r10f.ok === true, r10f);
+  ok('派出瞬间起点格已清空（不渲染第二份兵）',
+     Game.troopsAt(star.gx, star.gy).p1 === 0, Game.troopsAt(star.gx, star.gy));
+  ok('派出瞬间 activeTroops 不双计（= 派出量）',
+     Game.activeTroops('p1') === 20, { active: Game.activeTroops('p1') });
+  Game.updateMarch(2);   // 走完第一格
+  ok('走第一格后兵力仍守恒（20）', Game.activeTroops('p1') === 20, Game.activeTroops('p1'));
+  Game.reset(); rich();
+  {
+    const star2 = { gx: CASTLE().gx, gy: CASTLE().gy - 1 };
+    Game.placeRoad(star2.gx, star2.gy);
+    layRoadTo(star2.gx, star2.gy, CFG.map.resources[0].gx, CFG.map.resources[0].gy);
+    Game.addTroops(star2.gx, star2.gy, 'p1', 20);
+    Game.orderMoveFrom(star2.gx, star2.gy, CFG.map.resources[0].gx, CFG.map.resources[0].gy);
+    // 对刚派出的部队（idx=0，兵只在 march 账面）重新下令：flush 必须把兵真的落回格子（否则 notroop）
+    const m10f = S().march[0];
+    Game.flushMarchAt(m10f.path[m10f.idx].gx, m10f.path[m10f.idx].gy, 'p1');
+    ok('flush 刚派出的部队（idx=0）：兵落回起点格且 march 清空',
+       Game.troopsAt(star2.gx, star2.gy).p1 === 20 && S().march.length === 0,
+       { 格上: Game.troopsAt(star2.gx, star2.gy).p1, march: S().march.length });
+  }
+}
+
+/* ---------- 10g. 出发瞬间（idx=0）粮尽停军不蒸发（排查 2026-10-11 回归） ----------
+ * 复刻 AI 派兵口径（清格 + push march）：旧版 idx=0 粮尽 → march 被 splice、兵无人落回
+ * → 凭空蒸发（实测 AI 训 2620 兵终局剩 21）。 */
+head('10g idx=0 粮尽停军不蒸发');
+Game.reset(); rich();
+{
+  const sv = { gx: CASTLE().gx, gy: CASTLE().gy - 1 };
+  Game.placeRoad(sv.gx, sv.gy);
+  layRoadTo(sv.gx, sv.gy, CFG.map.resources[0].gx, CFG.map.resources[0].gy);
+  Game.addTroops(sv.gx, sv.gy, 'p1', 14);
+  Game.setTroops(sv.gx, sv.gy, 'p1', 0);   // AI 式：派出即清格
+  const svPath = Game.findPath(sv.gx, sv.gy, CFG.map.resources[0].gx, CFG.map.resources[0].gy, 'p1');
+  S().march.push({ side: 'p1', n: 14, path: svPath, idx: 0, t: 0, spent: 0 });
+  S().res.food = 5;                        // 不够走第一格（0.6×14=8.4）
+  for (let i = 0; i < 5 && S().march.length; i++) Game.updateMarch(1);
+  ok('出发瞬间粮尽：march 已清空', S().march.length === 0, S().march.length);
+  ok('★ 14 兵全部落回起点格（不蒸发）',
+     Game.troopsAt(sv.gx, sv.gy).p1 === 14 && Game.totalTroops('p1') === 14,
+     { 起点格: Game.troopsAt(sv.gx, sv.gy).p1, 总: Game.totalTroops('p1') });
+}
 
 /* ---------- 10e. 道路额度（第四十六次修订，用户拍板方案 A） ----------
  * 规则：每方"主动铺设"的路有格数上限，预设官道/桥不占；铺满要拆旧路才能继续（铺拆结合）。 */
@@ -1135,6 +1192,83 @@ ok('兵力达标时把主城列为目标（可达才派兵）',
    !!go15n && go15n.target.gx === S().castle.gx && go15n.target.gy === S().castle.gy,
    go15n ? { 目标: go15n.target.gx + ',' + go15n.target.gy, 步数: go15n.path.length } : null);
 
+/* ---------- 15o. 资源点守军对称（排查 2026-10-11 回归） ----------
+ * 旧版只有 AI（p2）占领后恢复守军满值，玩家（p1）不恢复 → AI 夺回玩家占的点 1 兵免费、
+ * 玩家夺回 AI 占的点要清 10 守军；且守军不认阵营，己方部队路过自家点会自相残杀。 */
+head('15o 资源点守军对称');
+Game.reset(); rich();
+{
+  const r15o = CFG.map.resources[0];
+  const k15o = r15o.gx + ',' + r15o.gy;
+  Game.setTroops(r15o.gx, r15o.gy, 'p1', 0);
+  S().resGuard[k15o] = 0;
+  S().resourceOwner[k15o] = null; delete S().resourceOwner[k15o];
+  Game.addTroops(r15o.gx, r15o.gy, 'p1', 12);
+  Game.engageTile(r15o.gx, r15o.gy, 'p1');
+  ok('p1 占领后守军恢复满值（与 p2 对称）',
+     S().resourceOwner[k15o] === 'p1' && S().resGuard[k15o] === CFG.hp.resourceGuard,
+     { 守军: S().resGuard[k15o], 归属: S().resourceOwner[k15o] });
+  // 己方部队再踏上自家资源点：不消耗守军、也不自残
+  Game.addTroops(r15o.gx, r15o.gy, 'p1', 3);
+  Game.engageTile(r15o.gx, r15o.gy, 'p1');
+  ok('己方部队路过自家资源点：不自残、守军不动',
+     S().resGuard[k15o] === CFG.hp.resourceGuard && Game.troopsAt(r15o.gx, r15o.gy).p1 === 15,
+     { 守军: S().resGuard[k15o], 我兵: Game.troopsAt(r15o.gx, r15o.gy).p1 });
+  // 敌方来夺：必须清守军（防反复易手对双方生效）
+  Game.setTroops(r15o.gx, r15o.gy, 'p1', 0);
+  Game.addTroops(r15o.gx, r15o.gy, 'p2', 12);
+  Game.engageTile(r15o.gx, r15o.gy, 'p2');
+  ok('敌方夺回玩家占的点：清掉守军后占领（对称）',
+     S().resourceOwner[k15o] === 'p2' && S().resGuard[k15o] === CFG.hp.resourceGuard,
+     { 守军: S().resGuard[k15o], 归属: S().resourceOwner[k15o] });
+}
+
+/* ---------- 15p AI 能量不为负（方案 B，2026-10-11 用户拍板） ----------
+ * 玩家侧 applyTick 自 2026-09-26 起有「资源永不为负」钳 0；AI 侧漏了同款 ——
+ * 事件「苛捐」-4⚡/Tick 曾把 AI 打到 -213⚡、整局瘫痪（§35 的 40 种子量化）。 */
+head('15p AI 能量不为负（方案 B）');
+Game.reset(); pinAI();
+S().events.p2.current = 'taxBurden';                 // 苛捐：每 Tick -4⚡（AI 无法拒绝）
+S().enemyRes.energy = 2;                             // 主城 Lv1 自带 +2 → 净 -2/Tick
+{
+  let minE15p = 1e9;
+  for (let i = 0; i < 30; i++) {
+    Game.applyTick();
+    minE15p = Math.min(minE15p, S().enemyRes.energy);
+  }
+  ok('AI 能量在负面事件下不被打到负（钳 0；修复前 30 Tick 会负到 -58）', minE15p >= 0, minE15p);
+}
+
+/* ---------- 15q 滞留待命判定（软处理，2026-10-11 用户拍板） ----------
+ * 野战行军失效后停在草地上的部队 = 滞留：可点选、不可调遣；UI 显示待命标记。 */
+head('15q 滞留待命判定');
+Game.reset();
+{
+  const c15q = S().castle;
+  Game.placeRoad(c15q.gx, c15q.gy - 1, 'p1');
+  Game.placeRoad(c15q.gx, c15q.gy - 2, 'p1');
+  Game.addTroops(c15q.gx, c15q.gy - 1, 'p1', 6);
+  S().policy.p1.slots = [{ key: 'fieldMarch', tier: 0 }];
+  // 用野战行军走一步到草地（主城北侧邻格是路，再往北构造一格草地目的地）
+  const g15q = { gx: c15q.gx, gy: c15q.gy - 3 };
+  const p15q = Game.findPath(c15q.gx, c15q.gy - 1, g15q.gx, g15q.gy, 'p1');
+  if (p15q) {
+    Game.setTroops(c15q.gx, c15q.gy - 1, 'p1', 0);
+    S().march.push({ side: 'p1', n: 6, path: p15q, idx: 0, t: 0, spent: 0 });
+    for (let i = 0; i < 12 && S().march.length; i++) Game.updateMarch(1);
+    S().policy.p1.slots = [];   // 政策失效
+    const end15q = p15q[p15q.length - 1];
+    ok('草地滞留判定 = true（野战失效后停在草地）',
+       Game.troopsAt(end15q.gx, end15q.gy).p1 === 6 && Game.isStrandedTroops(end15q.gx, end15q.gy, 'p1') === true,
+       { 兵: Game.troopsAt(end15q.gx, end15q.gy).p1, walkable: Game.walkable(end15q.gx, end15q.gy, 'p1') });
+    ok('道路上的部队不判滞留',
+       Game.isStrandedTroops(c15q.gx, c15q.gy - 1, 'p1') === false,
+       Game.isStrandedTroops(c15q.gx, c15q.gy - 1, 'p1'));
+  } else {
+    ok('15q 场景构造（草地可达）', false, 'findPath=null');
+  }
+}
+
 /* ============ 17 §19 政策系统 ============ */
 head('17 政策系统：触发 / 槽位 / 品质 / 效果');
 Game.reset();
@@ -1410,12 +1544,13 @@ S().resGuard[rk17d] = 0;
 Game.addTroops(rK.gx, rK.gy, 'p1', 10);
 Game.claimIfResource(rK.gx, rK.gy);
 S().resGuard[rk17d] = CFG.hp.resourceGuard;                     // 模拟敌方占领后守军回满
+S().resourceOwner[rk17d] = 'p2';                                // ★ 归属也要置为敌方（新守军阵营判定：己方不打自家守军）
 Game.addTroops(rK.gx, rK.gy, 'p1', 10);
 S().policy.p1.slots = [{ key: 'vanguardP', tier: 0 }];          // +30% → 伤害 13
 Game.engageTile(rK.gx, rK.gy, 'p1');
-ok('「先登·黄铜」10 兵一次清掉 10 守军（伤害 ×1.3）',
-   S().resGuard[rk17d] === 0 && S().resourceOwner[rk17d] === 'p1',
-   { 守军: S().resGuard[rk17d], 归属: S().resourceOwner[rk17d] });
+ok('「先登·黄铜」10 兵一次清掉 10 守军并占领（等效耗 8 兵；格上 10+2=12）',
+   S().resourceOwner[rk17d] === 'p1' && Game.troopsAt(rK.gx, rK.gy).p1 === 12,
+   { 归属: S().resourceOwner[rk17d], 剩兵: Game.troopsAt(rK.gx, rK.gy).p1 });
 
 // 哨塔图纸：防御塔射程 1~2 → 1~3
 Game.reset(); rich();
