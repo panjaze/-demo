@@ -211,7 +211,8 @@
      纯 CSS 控制（媒体查询），无 JS 参与 -->
 <div id="rotate-hint">
   <div class="rh-icon">📱</div>
-  <div class="rh-text">请将手机<b>横过来</b>游玩<br><span>本作为横屏设计 · 1v1 沙盘战场需要横向空间</span></div>
+  <div class="rh-text">请将手机<b>横过来</b>游玩<br><span>本作为横屏设计 · 1v1 沙盘战场需要横向空间<br>若已横屏仍见此提示，请检查浏览器 / 系统的「竖屏锁定」设置</span></div>
+  <button id="rh-continue" class="tb-btn">仍要以竖屏继续 ▸</button>
 </div>
 
 <!-- 新手引导（第四十八次修订）：开局选择界面 + 软引导层（手指/气泡/跳过）。
@@ -249,7 +250,18 @@
 (function () {
   var el = document.getElementById('rotate-hint');
   if (!el) return;
+  /* 第七十五次修订补充：QQ/UC 等浏览器默认锁竖屏（不跟随系统旋转），
+   * 提示会永远挡住入口 —— 提供「仍要以竖屏继续」强制入口（本次会话内不再提示）。 */
+  var dismissed = false;
+  var btn = document.getElementById('rh-continue');
+  if (btn) btn.addEventListener('click', function () {
+    dismissed = true;
+    try { sessionStorage.setItem('tb_rotate_dismissed', '1'); } catch (e) {}
+    el.style.display = 'none';
+  });
+  try { if (sessionStorage.getItem('tb_rotate_dismissed') === '1') dismissed = true; } catch (e) {}
   function sync() {
+    if (dismissed) { el.style.display = 'none'; return; }
     var portrait = window.innerHeight > window.innerWidth;
     var narrow = window.innerWidth <= 820;
     el.style.display = (portrait && narrow) ? 'flex' : 'none';
