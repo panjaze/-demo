@@ -150,6 +150,7 @@ const Game = {
     S.stats.lost = 0;          // 我方累计损失的士兵（兜底计分用）
 
     this.state = S;
+    this.dealOpeningHand();   // ★ 第八十四次修订：开局自带随机一级主城卡池 5 张（视觉体验 + 面试官秒懂卡牌系统）
     // 开局立刻给一次政策三选一（事件牌要从第 3 分钟才开始）
     /* ★ 第四十六次修订：AI 也要发政策（它原来只发玩家）。
      *   aiPickPolicy() 早就写好了，只是从来没人给 AI 发 offer —— 属于"功能写完了没接线"，
@@ -598,6 +599,19 @@ const Game = {
   },
 
   /** 当前主城等级下可出现的卡（卡池） */
+  /** ★ 第八十四次修订：开局自带随机一级主城卡池 5 张（不重复）。
+   *  目的（用户拍板）：玩家一进去就有满手牌的视觉体验，面试官无需操作即可看懂卡牌系统。
+   *  平衡口径：免费但**随机**（不构成优选开局）；只影响玩家（AI 无手牌系统）。 */
+  dealOpeningHand() {
+    const lv1 = this.availableCards();   // 一级主城卡池（castleReq ≤ 1）
+    const picks = [];
+    const bag = lv1.slice();
+    while (picks.length < 5 && bag.length) {
+      picks.push(bag.splice(Math.floor(Math.random() * bag.length), 1)[0]);
+    }
+    picks.forEach((k, i) => { this.state.hand[i] = { key: k }; });
+  },
+
   availableCards() {
     const lv = this.state.castleLevel;
     const out = [];

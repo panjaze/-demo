@@ -1619,7 +1619,9 @@ const UI = {
     $('btn-open').disabled = !canOpen;
     $('btn-open').textContent = (S.shop ? '抽取 · ' : '开牌 · ') + cost + ' ⚡';
     $('shop-cur-cost').textContent = '本次开牌 ' + cost + ' ⚡（已抽取 ' + S.rerolls + ' 次）';
-    if (!S.shop) $('shop-hint').textContent = '开局先开一次牌，从 5 张里挑便宜的买';
+    if (!S.shop) $('shop-hint').textContent = (S.hand.filter(Boolean).length >= S.hand.length)
+      ? '手牌已满 —— 先建造或弃牌腾位后再抽取'
+      : '开局先开一次牌，从 5 张里挑便宜的买';
     else if (S.res.energy < CFG.shop.openCost) $('shop-hint').textContent = '能量不足，无法抽取';
     else $('shop-hint').textContent = '点击候选卡按标价买入 · 买完把手牌拖到地图空地上建造';
 
