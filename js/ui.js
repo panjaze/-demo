@@ -295,8 +295,10 @@ const UI = {
   },
 
   isCastleClick(gx, gy) {
+    /* ★ 第八十一次修订：主城 2×2 全占地可点（此前只认左上角一格——75% 面积点了没反应） */
+    const f = CFG.castle.foot;
     const c = Game.state.castle;
-    return c.gx === gx && c.gy === gy;
+    return gx >= c.gx && gx < c.gx + f.w && gy >= c.gy && gy < c.gy + f.h;
   },
 
   isMyBuildingClick(gx, gy) {
@@ -361,10 +363,14 @@ const UI = {
     }
 
     // ② 没有派兵意图时，点自己的建筑/主城 = 选中它（弹出操作条）
+    // ★ 第八十一次修订：主城例外——点 2×2 占地任意格 → 直接打开专属升级弹窗（不进操作条流程）
+    if (!sel && this.isCastleClick(gx, gy)) {
+      Engine.audio.click();
+      this.setModal('castle');
+      return;
+    }
     if (!sel && (this.isMyBuildingClick(gx, gy))) {
-      this.tileSel = this.isCastleClick(gx, gy)
-        ? { gx: gx, gy: gy, isCastle: true }
-        : { gx: gx, gy: gy, isCastle: false };
+      this.tileSel = { gx: gx, gy: gy, isCastle: false };
       Engine.audio.click();
       UI.render();
       return;
@@ -457,8 +463,32 @@ const UI = {
     if (bar) bar.classList.toggle('discard-mode', this.discardMode);
     const btn = $('btn-discard');
     if (btn) btn.classList.toggle('active', this.discardMode);
-    if (this.discardMode) UI.hint('弃牌模式：把要弃掉的牌拖到右下角弃牌堆（不限张数 · Esc / 再点弃牌退出）');
+    if (this.discardMode) UI.hint('弃牌模式：点击要弃的牌直接弃掉，可连弃（Esc / 再点弃牌键退出）');
     UI.render();
+  },
+
+  /* ==================== 卡牌描述「拖动查看」（第八十四次修订） ====================
+   *  长描述被卡面裁断时，按住描述区上下拖动即可滚动阅读 —— 无滚轮、无滚动条。
+   *  事件委托：对动态生成的 choice 卡（事件/政策/奖励）统一生效。 */
+  bindCardScroll() {
+    const self = this;
+    let st = null;                                     // { el, startY, startTop }
+    document.addEventListener('pointerdown', function (e) {
+      const desc = e.target.closest('.card-choice .card-desc');
+      if (!desc) return;
+      if (desc.scrollHeight <= desc.clientHeight + 2) return;   // 没有被裁内容，不拦截
+      st = { el: desc, startY: e.clientY, startTop: desc.scrollTop };
+      desc.classList.add('desc-grabbing');
+      e.preventDefault();
+    });
+    document.addEventListener('pointermove', function (e) {
+      if (!st) return;
+      e.preventDefault();
+      st.el.scrollTop = st.startTop - (e.clientY - st.startY);
+    });
+    const end = function () { if (st) { st.el.classList.remove('desc-grabbing'); st = null; } };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
   },
 
   /* ==================== 弹出层（抽卡 / 牌库） ==================== */
@@ -471,9 +501,16 @@ const UI = {
         self.setModal(self.modal === btn.dataset.modal ? null : btn.dataset.modal);
       });
     });
+    self.bindCardScroll();
     $('modal-close').addEventListener('click', function () {
       if (self.modal === 'event') return;          // §20 事件牌必须领取，不允许关
       Engine.audio.click();
+      /* ★ 第八十一次修订：显式关闭 = 对当前 offer 不再自动重弹（武装 auto-open 守卫）——
+       *   否则关闭后同帧/下帧的 render 自动弹分支会把它弹回（=「点了没有用」）。
+       *   新 offer（新引用）不受影响，仍会自动弹；顶栏「政策」按钮随时可再打开。 */
+      if (self.modal === 'policy' || self.modal === 'policyview') {
+        self.policyAutoOpen = Game.state.policy.p1.offer || null;
+      }
       self.setModal(null);
     });
     $('modal').addEventListener('click', function (e) {
@@ -487,7 +524,9 @@ const UI = {
     $('pane-shop').classList.toggle('hidden', mode !== 'shop');
     $('pane-pool').classList.toggle('hidden', mode !== 'pool');
     $('pane-reward').classList.toggle('hidden', mode !== 'reward');
-    $('pane-policy').classList.toggle('hidden', mode !== 'policy' && mode !== 'policyview' && mode !== 'event');
+    /* ★ 第八十一次修订：补 eventview —— 此前面板切换漏了该模式，「生效中的事件」弹窗永远空白 */
+    $('pane-policy').classList.toggle('hidden', mode !== 'policy' && mode !== 'policyview' && mode !== 'event' && mode !== 'eventview');
+    $('pane-castle').classList.toggle('hidden', mode !== 'castle');
     $('pane-quest').classList.toggle('hidden', mode !== 'quest');
     document.querySelectorAll('#corner-ui .corner-btn').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.modal === mode);
@@ -507,6 +546,10 @@ const UI = {
       $('modal-title').textContent = '生效中的事件';
       $('modal-sub').textContent = '负面事件可支付资源提前化解 · 也可以等它被下一张顶掉';
       this.renderEventViewPane();
+    } else if (mode === 'castle') {
+      $('modal-title').textContent = '主城';
+      $('modal-sub').textContent = '主城等级决定建筑等级上限、每种建筑上限与政策品质';
+      this.renderCastlePane();
     } else if (mode === 'quest') {
       $('modal-title').textContent = '星级任务';
       $('modal-sub').textContent = '完成一星全部 5 项 → 领取 1 件遗物（共 3 星）';
@@ -545,7 +588,7 @@ const UI = {
 
   /* ==================== 格子操作条（选中建筑/主城时出现） ==================== */
 
-  /** 点的是不是我方主动铺的路（预设官道/桥不可拆，故不算） */
+  /** 点的是不是我方的路（桥等 preset 路不可拆，拆路动作里另判） */
   isMyRoadClick(gx, gy) {
     const r = Game.state.roads[Game.tileKeyOf(gx, gy)];
     return !!(r && r.side === 'p1');
@@ -703,9 +746,10 @@ const UI = {
       const handIdx = parseInt(card.dataset.hand, 10);
       const item = Game.state.hand[handIdx];
       if (!item) return;
-      /* ★ 第六十七次修订：弃牌模式改成「拖到右下角弃牌堆」，且**不自动退出**（不限张数）。
-       *   之前是点卡即弃 —— 但不限张数的模式下，一下点错就白丢一张，拖拽给一次反悔的机会。
-       *   所以弃牌模式里点卡不弃牌，照常进入拖拽，只有拖到弃牌堆上松手才算。 */
+      /* ★ 第八十四次修订（用户拍板）：弃牌模式 = 点击即弃 + 连续弃牌。
+       *   判定在 pointerup（endDrag）：点了没拖 = 直接弃掉；拖到弃牌堆 = 弃掉；
+       *   两种方式模式都保持，可连弃；拖到别处 = 取消。退出：Esc / 再点弃牌键。
+       *   ⚠️ 判定必须放 pointerup —— 在 pointerdown 拦截会吞掉拖拽路径（S3b 实测踩中）。 */
       e.preventDefault();
       self.startDrag(handIdx, item.key, e.clientX, e.clientY);
     });
@@ -788,6 +832,18 @@ const UI = {
       }
     });
 
+    // ★ 主城升级界面：升级按钮（成功 → 自动切换政策三选一，连贯流程）
+    $('pane-castle').addEventListener('click', function (e) {
+      const act = e.target.closest('[data-action="castle-upgrade"]');
+      if (!act) return;
+      if (Game.upgradeCastle()) {
+        Engine.audio.win();
+        self.tileSel = null;                     // 清选中，防止 renderTileActions 把 castle 弹窗拉回
+        if (Game.state.policy.p1.offer) { self.setModal('policy'); }   // 升级 → 政策三选一，连贯流程
+        else { self.renderCastlePane(); }
+      } else { UI.hint('主城升级失败：能量不足'); Engine.audio.hurt(); }
+    });
+
     // 顶栏「政策」按钮：查看当前政策 / 有待选时打开三选一
     $('btn-policy').addEventListener('click', function () {
       if (Game.state.events.p1.offer) { UI.setModal('event'); return; }
@@ -846,7 +902,9 @@ const UI = {
         : d.desc.replace('{v}', String(Math.abs(e0.vals[tier])));
       const school = CFG.policy.schools[d.school];
       const el = document.createElement('div');
-      el.className = 'card card-choice card-relic' + (pickable ? '' : ' card-dim');
+      /* ★ 第八十一次修订：「已颁布的政策」查看视图不再加 card-dim（opacity .55 在羊皮纸上发白）——
+       *   pickable 参数仍控制点击行为，视觉一律正常亮度。 */
+      el.className = 'card card-choice card-relic';
       el.dataset.key = UI.policyArtKey(d.school);      // ★ 卡面 = 该流派专属插画
       if (pickable) el.dataset.policy = String(idx);
       /* ★ 第六十五次修订：与手牌卡同构 —— 蓝带放卡名、左上金属槽放品质、羊皮纸区放流派+正文 */
@@ -1012,6 +1070,75 @@ const UI = {
       '（现有 ' + Math.floor(S.res.energy) + '⚡ / ' + Math.floor(S.res.food) + '🌾）</button>';
   },
 
+  /** ★ 第八十一次修订：主城升级界面（点主城标识打开）——信息/属性/下一级预览/升级按钮；
+   *  升级成功自动切换到政策三选一（onCastleUp 已 roll 新 offer，连贯流程）。 */
+  renderCastlePane() {
+    const S = Game.state;
+    const lv = S.castleLevel;
+    const L = CFG.castle.levels[lv - 1];
+    const nxt = lv < CFG.castle.maxLevel ? CFG.castle.levels[lv] : null;
+    const cost = Game.castleUpgradeCost();
+    const tier = CFG.policy.tierByLevel[lv] || [1, 0, 0];
+    const tierN = CFG.policy.tierNames;
+    const tierTxt = tierN[0] + ' ' + Math.round(tier[0] * 100) + '% · ' + tierN[1] + ' ' + Math.round(tier[1] * 100) + '% · ' + tierN[2] + ' ' + Math.round(tier[2] * 100) + '%';
+    const tierNext = nxt ? (tierN[0] + ' ' + Math.round(CFG.policy.tierByLevel[lv + 1][0] * 100) + '% · ' +
+      tierN[1] + ' ' + Math.round(CFG.policy.tierByLevel[lv + 1][1] * 100) + '% · ' +
+      tierN[2] + ' ' + Math.round(CFG.policy.tierByLevel[lv + 1][2] * 100) + '%') : '';
+
+    /* 牌解锁差异（castleReq）：当前已解锁 vs 下一级新增 */
+    const all = [];
+    CFG.cards.buildings.forEach(k => all.push([k, CFG.buildings[k]]));
+    Object.keys(CFG.cards.roads).forEach(k => all.push([k, CFG.cards.roads[k]]));
+    all.push(['upgrade', CFG.cards.upgrade]);
+    Object.keys(CFG.cards.effects).forEach(k => all.push([k, CFG.cards.effects[k]]));
+    const unlocked = [], nextUnlock = [];
+    all.forEach(([k, d]) => {
+      const req = d.castleReq || 1;
+      if (req <= lv) unlocked.push(d.name);
+      else if (req === lv + 1) nextUnlock.push(d.name);
+    });
+
+    const row = (label, cur, nxtVal) =>
+      '<div class="cc-row"><span class="cc-label">' + label + '</span>' +
+      '<span class="cc-line"><span class="cc-cur">' + cur + '</span>' +
+      (nxtVal !== undefined && nxtVal !== null ? '<span class="cc-arrow">→</span><span class="cc-next">' + nxtVal + '</span>' : '') +
+      '</span></div>';
+
+    /* ★ 第八十四次修订二版：面板结构改为「cc-body 可滚内容 + cc-actions 底部整条动作条」
+     *   （文明6/全战语言：升级按钮 = 面板底部同宽动作条，不是面板里飘着的独立按钮） */
+    let html = '';
+    html += '<div class="cc-body">';
+    html += '<div class="cc-hero"><span class="cc-castle-ico">🏰</span>' +
+      '<span class="cc-level">Lv' + lv + '</span>' +
+      '<span class="cc-hp">防御 ' + Game.castleHp() + ' / ' + Game.castleMaxHp() + '</span></div>';
+    html += '<div class="cc-grid">' +
+      row('每 Tick 能量', '+' + (L.energy || 0), nxt ? '+' + nxt.energy : null) +
+      row('每种建筑上限', L.perTypeCap || 3, nxt ? nxt.perTypeCap : null) +
+      row('士兵上限', CFG.soldier.maxByLevel[lv - 1], nxt ? CFG.soldier.maxByLevel[lv] : null) +
+      row('建筑等级上限', Game.buildingLevelCap(), nxt ? Math.min(lv + 1, 3) : null) +
+      '</div>';
+    html += '<div class="cc-tier">政策品质：<b>' + tierTxt + '</b>' +
+      (nxt ? '<span class="cc-arrow"> → </span>' + tierNext : '') + '</div>';
+    html += '<div class="cc-unlock"><span class="cc-label">已解锁</span>' +
+      unlocked.map(n => '<span class="cc-tag">' + n + '</span>').join('') + '</div>';
+    if (nxt && nextUnlock.length)
+      html += '<div class="cc-unlock cc-unlock-next"><span class="cc-label">Lv' + (lv + 1) + ' 新增</span>' +
+        nextUnlock.map(n => '<span class="cc-tag cc-tag-next">' + n + '</span>').join('') + '</div>';
+
+    html += '</div>';   /* /cc-body */
+
+    /* ★ 第八十四次修订三版（用户拍板）：只保留按钮本身 —— 不套任何容器/消耗行，
+     *   按钮直接贴面板底部全宽；消耗 = 按钮右侧费用，现有能量顶栏随时可见。 */
+    if (nxt && cost) {
+      const ok = Game.canUpgradeCastle();
+      html += '<button class="cc-upgrade-btn" data-action="castle-upgrade"' + (ok ? '' : ' disabled') + '>' +
+        '<span>升级到 Lv' + (lv + 1) + '</span><span class="cc-cost-inline">' + cost.energy + ' ⚡</span></button>';
+    } else {
+      html += '<div class="cc-max-bar">🏰 主城已达最高等级 Lv' + CFG.castle.maxLevel + '</div>';
+    }
+    $('pane-castle').innerHTML = html;
+  },
+
   startDrag(handIdx, key, x, y) {
     this.tileSel = null;                          // 点击任何区域 → 收起操作条
     this.placeMode = null;                        // 拖卡会取消放置模式（卡仍在手牌，不会丢）
@@ -1116,6 +1243,24 @@ const UI = {
     const hit = this.hitTest(x, y);
     const handIdx = d.handIdx;
     let ok = false;
+
+    /* ★ 第八十四次修订（用户拍板）：弃牌模式 = 点击即弃 + 连续弃牌。
+       · 点了没拖（位移 <12px）= 直接弃掉，**模式保持**，可继续点下一张；
+       · 拖到右下角弃牌堆 = 弃掉，模式保持（批量路径）；
+       · 弃牌模式下拖到其他任何地方 = 取消（防止误触发放置/效果）；
+       · 退出：Esc / 再点弃牌键。 */
+    if (this.discardMode) {
+      if (moved < 12 || (hit && hit.zone === 'discard')) {
+        ok = Game.discard(handIdx);
+        if (global.Engine && Engine.audio) Engine.audio[ok ? 'pickup' : 'hurt']();
+        UI.hint(ok ? '已弃牌（不返还资源）· 可继续点牌弃掉 · Esc / 再点弃牌键退出' : '弃牌失败');
+      } else {
+        UI.hint('已取消 · 弃牌模式下把牌拖到弃牌堆（或直接点牌）才会弃掉');
+      }
+      this.cancelDrag();
+      UI.render();
+      return;
+    }
 
     /* ★ 弃牌堆（第六十七次修订）：**仅在弃牌模式下**，任意卡种拖到右下角弃牌堆 = 弃掉。
      *   模式不自动退出（不限张数），Esc / 再点弃牌角标退出。
@@ -1314,8 +1459,13 @@ const UI = {
         this.setModal('event');
       }
 
-      /* ---- §19 政策三选一（有 offer 就弹，优先级最低） ---- */
-      if (S.policy && S.policy.p1.offer && !S.questClaiming && !(S.events && S.events.p1.offer) && !this.modal) {
+      /* ---- §19 政策三选一（有 offer 就弹，优先级最低） ----
+       * ★ 第八十一次修订：同一 offer 只自动弹一次（policyAutoOpen 记录已弹的 offer 引用）——
+       *   此前每帧"有 offer 且无弹窗就重弹"，玩家点 × 关闭后下一帧立刻弹回 =「点了没有用」。
+       *   关闭后可从顶栏「政策」按钮随时再打开颁布；新 offer（新引用）仍会自动弹。 */
+      if (S.policy && S.policy.p1.offer && !S.questClaiming && !(S.events && S.events.p1.offer) && !this.modal &&
+          this.policyAutoOpen !== S.policy.p1.offer) {
+        this.policyAutoOpen = S.policy.p1.offer;
         this.setModal('policy');
       }
     }
@@ -1545,12 +1695,9 @@ const UI = {
     $('ta-upgrade').classList.remove('hidden');
 
     if (t.isCastle) {
-      const cost = Game.castleUpgradeCost();
-      $('ta-title').textContent = '🏰 主城 Lv' + S.castleLevel + ' · 防御 ' + Game.castleHp() +
-        ' · 每种建筑上限 ' + Game.typeCap('farm');
-      $('ta-upgrade').textContent = cost ? ('升级 ' + cost.energy + ' ⚡') : '已满级';
-      $('ta-upgrade').disabled = !cost || !Game.canUpgradeCastle();
-      $('ta-demolish').classList.add('hidden');
+      /* ★ 第八十一次修订：主城走专属升级弹窗——本函数只负责把简陋横条藏住；
+       *   打开弹窗是点击处理器的一次性动作（此处每帧 setModal 会与 render 互相递归）。 */
+      bar.classList.add('hidden');
       return;
     }
 

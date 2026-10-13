@@ -577,17 +577,20 @@ html, body {
 .policy-chip.tier-bad { border-color: rgba(255,138,122,.7); background: rgba(255,138,122,.2); }
 .corner-gold { border-color: rgba(255,209,102,.7); }
 .corner-gold .ck-icon { filter: drop-shadow(0 0 4px rgba(255,209,102,.5)); }
+/* ★ 第八十一次修订：配色从深色面板体系迁移到浅羊皮纸体系（旧浅灰白字 #cfd4dd 在羊皮纸上不可读） */
 .quest-star { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px;
-              border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
-.quest-star-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; letter-spacing: 1.5px; }
-.quest-done   { border-color: rgba(126,217,87,.5); background: rgba(126,217,87,.08); }
-.quest-done .quest-star-title { color: #7ed957; }
-.quest-active { border-color: rgba(255,209,102,.55); background: rgba(255,209,102,.07); }
-.quest-active .quest-star-title { color: #ffd166; }
-.quest-locked { opacity: .45; }
+              border: 1px solid rgba(90,61,30,.28); background: rgba(90,61,30,.05); }
+.quest-star-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; letter-spacing: 1.5px;
+                    color: #4a3826; }
+.quest-done   { border-color: rgba(63,107,42,.5); background: rgba(126,217,87,.12); }
+.quest-done .quest-star-title { color: #3f6b2a; }
+.quest-active { border-color: rgba(181,138,52,.6); background: rgba(255,209,102,.12); }
+.quest-active .quest-star-title { color: #8a6210; }
+.quest-locked { opacity: .72; }
+.quest-locked .quest-star-title { color: #5a4632; }
 .quest-row { display: flex; justify-content: space-between; gap: 12px;
-             padding: 4px 0; font-size: 15px; color: #cfd4dd; }
-.quest-row.quest-ok { color: #7ed957; }
+             padding: 4px 0; font-size: 15px; color: #4a3826; }
+.quest-row.quest-ok { color: #3f6b2a; font-weight: 700; }
 .quest-row b { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 
 /* ===== §20 事件预警条（第二十一次修订：可视化预期） ===== */
@@ -1251,3 +1254,345 @@ html, body {
   0%, 100% { outline-color: rgba(255,210,63,.95); }
   50%      { outline-color: rgba(255,210,63,.30); }
 }
+
+/* ==================== 弹窗排版收敛（第八十一次修订：消灭原生滚动条） ====================
+ * 用户实机反馈：政策弹窗出现原生横竖滚轮、刷新按钮要拖动才能看到、右上关闭键不显眼、
+ * 标题/副标题对比度不足。原则：
+ *   ① 选择型弹窗（政策/遗物/事件/抽卡）内容永远一屏放下 —— 卡片用 min()+aspect-ratio 自适应缩放；
+ *   ② .modal-body 禁用原生滚动（overflow:hidden），合法的长信息列表（卡池/任务）在面板内滚动且滚动条换成羊皮纸细条；
+ *   ③ 右上角木钮 = 关闭键本体（此前是装饰圆钮 + 一个不显眼的小 ×）。 */
+
+.modal-body { overflow: hidden; }              /* 弹窗框体永不出现原生滚动条 */
+
+/* 弹窗自适应矮视口：高度封顶 94vh（羊皮纸背景 100% 100% 可拉伸），宽度不超 96vw */
+.modal-box { width: min(800px, 96vw); height: min(560px, 94vh); }   /* ★ 560：固定大卡(254)+说明+刷新钮一屏放下（512 时溢出 44px 出滚轮的根源）；羊皮纸 100%/100% 竖向拉伸 9% 无感 */
+
+/* 中间档（501~620px 高视口）：大卡放不下 → 整卡等比缩小（字号同缩，字面比例不变） */
+@media (min-height: 501px) and (max-height: 620px) {
+  .reward-cards .card, #policy-cards .card { width: 150px; height: 209px; flex: 0 0 150px; }
+  .reward-cards .card-name, #policy-cards .card-name { font-size: 15px; letter-spacing: 1.5px; }
+  .reward-cards .card-desc, #policy-cards .card-desc { font-size: 11px; }
+  .reward-cards .card-badge, #policy-cards .card-badge { font-size: 15px; }
+  .card-choice .card-kind-line { font-size: 9.5px; }
+  #policy-hint { font-size: 11px; }
+}
+
+/* 选择型面板：纵向居中，卡片整体缩放适配 */
+#pane-policy, #pane-reward {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px; min-height: 0;
+}
+#policy-cards, .reward-cards { flex: 0 0 auto; padding: 4px 12px; }   /* ★ 卡牌恢复固定 182×254（用户确认原字比例正确，勿动） */
+#policy-hint { width: 100%; flex: 0 0 auto; }   /* 全宽：bh-btn 不因收缩容器折行 */
+#policy-hint { flex: 0 0 auto; }
+
+/* 任务列表（长信息）在面板内滚动 —— 滚动条换羊皮纸细条，不再是原生灰白粗条 */
+#pane-quest { overflow-y: auto; max-height: 100%; padding-right: 6px; }
+#pane-pool { overflow-y: auto; padding-right: 6px; }
+#pane-quest::-webkit-scrollbar, #pane-pool::-webkit-scrollbar, .mp-body::-webkit-scrollbar {
+  width: 8px;
+}
+#pane-quest::-webkit-scrollbar-track, #pane-pool::-webkit-scrollbar-track, .mp-body::-webkit-scrollbar-track {
+  background: rgba(74,53,32,.12); border-radius: 4px;
+}
+#pane-quest::-webkit-scrollbar-thumb, #pane-pool::-webkit-scrollbar-thumb, .mp-body::-webkit-scrollbar-thumb {
+  background: rgba(74,53,32,.45); border-radius: 4px;
+}
+#pane-quest::-webkit-scrollbar-thumb:hover, #pane-pool::-webkit-scrollbar-thumb:hover, .mp-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(74,53,32,.65);
+}
+#pane-quest, #pane-pool, .mp-body {
+  scrollbar-width: thin;                         /* Firefox */
+  scrollbar-color: rgba(74,53,32,.45) rgba(74,53,32,.12);
+}
+
+/* 右上角关闭键 = 底图自带的圆形木钮本体：× 文字叠在钮心（红点标记实测 90.52%/16.43% 正中），
+ * 透明背景不遮钮面；z-index 必须高于 .modal-body —— 钮下半截在其区域上层，否则点击被吞。 */
+.modal-close {
+  left: 90.52%; top: 16.43%; right: auto;
+  transform: translate(-50%, -50%);
+  width: 48px; height: 48px;
+  font-size: 26px; font-weight: 800;
+  color: #f3e7c8;
+  background: none; border: none; box-shadow: none;
+  text-shadow: 0 2px 3px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.5);
+  z-index: 5;
+  transition: filter .12s, transform .1s;
+}
+.modal-close:hover {
+  transform: translate(-50%, -50%) scale(1.12);
+  filter: brightness(1.4) drop-shadow(0 0 5px rgba(255,209,102,.55));
+}
+.modal-close:active { transform: translate(-50%, -50%) scale(.94); }
+
+/* 文字对比度：标题/副标题/说明行在浅羊皮纸上一律加深 */
+.modal-head .rh-title { color: #33230f; text-shadow: 0 1px 0 rgba(255,250,235,.9), 0 2px 5px rgba(120,90,55,.28); }
+#modal-sub, .modal-box .muted { color: #4e3a22; font-weight: 600; }
+#policy-hint { color: #4e3a22; }
+.card-choice .card-kind-line { color: #63482a; font-weight: 700; }
+.modal-body > .pane { height: 100%; }          /* 面板高度锁定=弹窗体 → 长列表在面板内滚动而非撑破弹窗 */
+
+
+/* ==================== 主城升级界面（第八十一次修订续） ====================
+ * 点主城标识 → 专属升级弹窗：属性四行（当前→下一级）、政策品质、解锁牌差异、
+ * 升级按钮+消耗明细；升级成功自动切政策三选一。配色走羊皮纸深棕体系。 */
+#pane-castle { display: flex; flex-direction: column; align-items: center;
+               justify-content: flex-start; gap: 7px; height: 100%;
+               overflow: hidden; padding: 0 6px; text-align: center; }   /* ★ 禁滚轮（用户拍板）：内容整体紧凑，一屏放下 */
+#pane-castle::-webkit-scrollbar { width: 8px; }
+#pane-castle::-webkit-scrollbar-track { background: rgba(74,53,32,.12); border-radius: 4px; }
+#pane-castle::-webkit-scrollbar-thumb { background: rgba(74,53,32,.45); border-radius: 4px; }
+.cc-hero { display: flex; align-items: baseline; gap: 12px; margin: 0; }
+.cc-castle-ico { font-size: 30px; }
+.cc-level { font-family: Georgia, 'Songti SC', serif; font-size: 30px; font-weight: 800;
+            color: #33230f; letter-spacing: 2px; }
+.cc-hp { font-size: 13.5px; font-weight: 700; color: #6b4e2e; }
+.cc-grid { display: flex; flex-direction: column; gap: 3px; min-width: 78%; }
+.cc-row { display: flex; align-items: center; gap: 10px; padding: 3px 14px;
+          background: rgba(90,61,30,.07); border-radius: 7px; font-size: 13.5px; }
+.cc-label { flex: 0 0 42%; text-align: right; color: #6b5744; }
+.cc-cur { font-weight: 800; color: #33230f; font-variant-numeric: tabular-nums; }
+.cc-arrow { color: #8a6c47; }
+.cc-next { font-weight: 800; color: #2f6b2a; font-variant-numeric: tabular-nums; }
+.cc-tier { font-size: 13.5px; color: #4e3a22; margin-top: 2px; }
+.cc-tier b { color: #33230f; }
+.cc-unlock { font-size: 12.5px; color: #4e3a22; max-width: 92%; line-height: 1.7; }
+.cc-unlock .cc-label { color: #8a6c47; margin-right: 6px; }
+.cc-tag { display: inline-block; padding: 1px 8px; margin: 1px 2px; border-radius: 999px;
+          background: rgba(90,61,30,.10); border: 1px solid rgba(90,61,30,.22);
+          color: #4a3826; font-size: 11.5px; }
+.cc-tag-next { background: rgba(126,217,87,.16); border-color: rgba(63,107,42,.4); color: #2f5c1e; }
+.cc-upgrade-box { display: flex; flex-direction: column; align-items: center; gap: 6px;
+                  margin-top: 2px; padding: 8px 22px 9px;
+                  border: 1px solid rgba(90,61,30,.30); border-radius: 10px;
+                  background: rgba(255,209,102,.10); }
+.cc-cost { font-size: 13.5px; color: #4e3a22; }
+.cc-cost b { color: #33230f; font-size: 16px; }
+.cc-max { font-size: 16px; font-weight: 800; color: #8a6210; }
+
+/* ========== 最终覆盖块 · 品牌定稿《把酒论兵》（2026-10-13 第八十四次修订） ==========
+ * 背景 = 用户参考效果图为基底的 i2i 纯背景（酒馆全景 + 右下战棋桌冰山一角）。
+ * 构图原则：画面自带左上/左侧暗部承载 UI —— 蒙版体系退场（scrimStops=0 / halo=0），
+ * 可读性由 UI 自身承担（鎏金标题落影 + 按钮深色木牌底）。
+ * 布局照参考效果图：标题左上（含小红旗），按钮列左侧中部，主按钮金色实体、辅助无框。 */
+#menu .menu-inner {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 52px 0 0 84px;
+  gap: 0;
+  background: none;
+}
+#menu .menu-brand { position: relative; }
+/* （2026-10-13 用户拍板：标题小红旗移除） */
+/* 标题：楷体鎏金渐变（clip:text + drop-shadow，避免 text-shadow 穿透透明字） */
+#menu .menu-title {
+  font-family: 'KaiTi', 'STKaiti', 'SimHei', serif;
+  font-size: 82px; font-weight: 700;
+  letter-spacing: 24px;
+  line-height: 1.05;
+  background: linear-gradient(180deg, #f9e9b4 0%, #ecc878 42%, #c08c38 82%, #a06e28 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 3px 0 rgba(46,28,10,.9)) drop-shadow(0 12px 22px rgba(0,0,0,.7));
+}
+/* 副标题：两侧装饰线 */
+#menu .menu-sub {
+  display: flex; align-items: center; gap: 16px;
+  margin: 20px 0 0 6px;
+  font-size: 20px; font-weight: 700; letter-spacing: 7px;
+  color: #dcc694;
+  text-shadow: 0 2px 8px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.95);
+}
+#menu .menu-sub::before, #menu .menu-sub::after {
+  content: ''; height: 1px; width: 78px; flex: none;
+}
+#menu .menu-sub::before { background: linear-gradient(90deg, transparent, rgba(200,168,104,.95)); }
+#menu .menu-sub::after  { background: linear-gradient(90deg, rgba(200,168,104,.95), transparent); }
+/* 按钮列：左侧中部 */
+#menu .menu-btns {
+  margin-top: 96px;
+  width: 296px;
+  gap: 16px;
+}
+#menu .menu-btn {
+  position: relative;
+  text-align: left;
+  font-size: 19px; letter-spacing: 5px;
+  padding: 15px 18px 15px 54px;
+  border-radius: 8px;
+  color: #ecdcb2;
+  background: linear-gradient(180deg, rgba(26,20,13,.88), rgba(10,8,6,.93));
+  border: 1px solid rgba(196,158,88,.42);
+  box-shadow: inset 0 1px 0 rgba(255,226,160,.10), 0 5px 16px rgba(0,0,0,.5);
+  transition: background .12s, border-color .12s, color .12s, transform .08s;
+}
+#menu .menu-btn::before {
+  content: '◆';
+  position: absolute; left: 24px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; color: rgba(214,178,104,.9);
+}
+#menu .menu-btn:hover {
+  background: linear-gradient(180deg, rgba(52,38,20,.92), rgba(28,19,10,.95));
+  border-color: rgba(244,210,132,.9);
+  color: #ffeec6;
+}
+#menu .menu-btn:active { transform: translateY(1px); }
+/* 开始游戏：全屏唯一实体金色亮牌（最大、最醒目） */
+#menu .menu-btn-primary {
+  font-size: 24px; letter-spacing: 8px;
+  padding: 18px 18px 18px 62px;
+  color: #2e1c08;
+  background: linear-gradient(180deg, #f2d48c 0%, #dcab52 46%, #b47e2e 100%);
+  border: 1px solid rgba(255,234,170,.95);
+  box-shadow: inset 0 2px 0 rgba(255,242,196,.6), inset 0 -4px 8px rgba(96,56,10,.38), 0 8px 26px rgba(0,0,0,.6);
+  text-shadow: 0 1px 0 rgba(255,242,200,.55);
+}
+#menu .menu-btn-primary::before {
+  content: '';
+  position: absolute; left: 26px; top: 50%; transform: translateY(-50%);
+  width: 0; height: 0;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 15px solid #3a2410;
+}
+#menu .menu-btn-primary:hover {
+  background: linear-gradient(180deg, #ffe29e 0%, #eabc60 46%, #c08c34 100%);
+  color: #201304;
+  border-color: #fff2cc;
+}
+#menu .menu-foot { color: rgba(196,182,150,.55); font-size: 11.5px; }
+/* 页脚恢复居中（修复：继承 menu-inner 的左对齐后与左下版本号叠字） */
+#menu .menu-foot { text-align: center; left: 120px; right: 120px; }
+/* 左下角版本号（参考图元素） */
+#menu .menu-ver {
+  position: absolute; left: 84px; bottom: 20px; z-index: 2;
+  font-size: 13px; letter-spacing: 1px;
+  color: rgba(206,190,156,.62);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+}
+/* 品牌版矮屏适配（≤640 高，如 1030×565）：压缩左列，版本号下沉避让按钮列 */
+@media (max-height: 640px) {
+  #menu .menu-inner { padding: 26px 0 0 56px; }
+  #menu .menu-title { font-size: 54px; letter-spacing: 12px; }
+  #menu .menu-sub { font-size: 16px; letter-spacing: 5px; margin-top: 10px; }
+  #menu .menu-btns { margin-top: 40px; width: 258px; gap: 9px; }
+  #menu .menu-btn { font-size: 15.5px; letter-spacing: 4px; padding: 10px 16px 10px 44px; }
+  #menu .menu-btn::before { left: 20px; }
+  #menu .menu-btn-primary { font-size: 18px; letter-spacing: 6px; padding: 12px 16px 12px 50px; }
+  #menu .menu-btn-primary::before { left: 21px; }
+  #menu .menu-ver { left: 56px; bottom: 10px; font-size: 11px; }
+  #menu .menu-foot { left: 36px; right: 36px; bottom: 12px; font-size: 10.5px; }
+}
+/* ========== 信息面板 · 品牌版（2026-10-13）：暖棕木系 + 分节排版 ========== */
+#menu .menu-panel {
+  background: linear-gradient(170deg, rgba(34,25,15,.98), rgba(16,12,8,.98));
+  border: 1px solid rgba(196,158,88,.42);
+  box-shadow: 0 26px 70px rgba(0,0,0,.78), inset 0 1px 0 rgba(255,226,160,.08);
+}
+#menu .mp-head { border-bottom: 1px solid rgba(196,158,88,.30); background: rgba(255,220,150,.04); }
+#menu .mp-title { color: #f0dca8; }
+#menu .mp-close { border-color: rgba(196,158,88,.45); color: #e2cfa2; }
+#menu .mp-close:hover { background: rgba(214,178,104,.14); }
+/* 玩法说明：分节 */
+.mp-help .mh-sec { margin-bottom: 15px; }
+.mp-help .mh-sec:last-child { margin-bottom: 2px; }
+.mp-help .mh-h {
+  font-size: 14.5px; font-weight: 800; letter-spacing: 2px;
+  color: #ecc984; margin: 0 0 7px;
+}
+.mp-help .mh-h::before { content: '◆ '; font-size: 9px; color: rgba(214,178,104,.85); vertical-align: 2px; }
+.mp-help .mp-list { margin: 0; padding-left: 20px; }
+.mp-help .mp-list li {
+  margin-bottom: 5px; line-height: 1.6;
+  color: rgba(240,228,200,.94); font-size: 13.5px;
+}
+.mp-help .mp-list li::marker { color: rgba(214,178,104,.75); }
+/* 制作信息：标签行 */
+.mp-about p { margin: 0 0 9px; line-height: 1.65; font-size: 13.5px; color: rgba(240,228,200,.94); }
+.mp-about .mp-k {
+  display: inline-block; min-width: 44px;
+  font-weight: 800; color: #ecc984; letter-spacing: 2px;
+}
+
+/* ========== 卡牌描述「拖动查看」（第八十四次修订）：无滚轮，按住上下拖 ========== */
+.card-choice .card-desc {
+  cursor: grab;
+  touch-action: none;
+  -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
+}
+.card-choice .card-desc.desc-grabbing { cursor: grabbing; }
+
+/* ========== 主城面板紧凑排版（第八十四次修订）：升级按钮必须可见 ========== */
+.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; min-width: 0; }
+.cc-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 10px; }
+.cc-label { flex: none; text-align: left; font-size: 12.5px; color: #6b5744; }
+.cc-cur { font-weight: 800; }
+.cc-arrow { font-size: 11px; }
+.cc-next { font-weight: 800; }
+.cc-tier { margin: 6px 0 4px; font-size: 12.5px; }
+.cc-unlock { margin: 3px 0; }
+.cc-tag { font-size: 11px; padding: 0 7px; }
+/* ★ 第八十四次修订三版（用户拍板）：按钮裸贴面板底部，信息区宽松重排 */
+#pane-castle { padding: 0; gap: 0; }
+.cc-body { flex: 1; overflow-y: auto; padding: 6px 34px 22px; min-height: 0; }
+.cc-body::-webkit-scrollbar { width: 8px; }
+.cc-body::-webkit-scrollbar-track { background: rgba(74,53,32,.10); border-radius: 4px; }
+.cc-body::-webkit-scrollbar-thumb { background: rgba(74,53,32,.40); border-radius: 4px; }
+.cc-hero { justify-content: center; margin: 8px 0 4px; }
+.cc-level { font-size: 36px; }
+.cc-hp { font-size: 14.5px; }
+/* 属性：两列竖排卡片（label 上小字 / 值下大字），有呼吸感 */
+.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 14px 0 6px; }
+.cc-row {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 16px; border-radius: 9px;
+  background: rgba(120,90,50,.10);
+  border: 1px solid rgba(140,105,60,.20);
+}
+.cc-label { font-size: 12px; color: #8a6c47; letter-spacing: 1px; }
+.cc-line { display: flex; align-items: baseline; gap: 7px; font-size: 18px; font-weight: 800; color: #33230f; }
+.cc-arrow { font-size: 13px; color: #3f7d3a; }
+.cc-next { color: #3f7d3a; }
+.cc-tier { margin: 16px 0 4px; font-size: 13.5px; text-align: center; }
+.cc-unlock { margin: 10px 0 2px; text-align: center; }
+.cc-upgrade-btn {
+  flex: none; align-self: center;
+  min-width: 250px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 14px;
+  font: inherit; font-size: 15.5px; font-weight: 800; letter-spacing: 2px;
+  color: #f4e9c8;
+  padding: 10px 30px; border: none; border-radius: 6px; cursor: pointer;
+  background: linear-gradient(180deg, #4a3822 0%, #2b1f12 100%);
+  border: 1px solid rgba(226,190,116,.7);
+  box-shadow: inset 0 1px 0 rgba(255,232,170,.24), inset 0 -2px 0 rgba(0,0,0,.4), 0 3px 10px rgba(0,0,0,.35);
+  text-shadow: 0 1px 2px rgba(0,0,0,.7);
+  transition: filter .12s;
+}
+.cc-upgrade-btn .cc-cost-inline {
+  color: #ffd76a; font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.cc-upgrade-btn:hover:not([disabled]) { filter: brightness(1.24); }
+.cc-upgrade-btn:active:not([disabled]) { filter: brightness(1.1); }
+.cc-upgrade-btn[disabled] { filter: saturate(.22) brightness(.72); cursor: default; }
+.cc-max-bar { flex: none; align-self: center; padding: 12px 24px; margin-top: 14px; text-align: center; font-weight: 800; color: #6b5744; }
+
+/* 主城升级按钮样式已并入 .cc-upgrade-btn（底部动作条方案，三版） */
+
+/* 主城面板 chips 紧凑化（第八十四次修订）：Lv2+ 已解锁较多时避免明显溢出感 */
+.cc-unlock { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px 2px; }
+.cc-tag { font-size: 10.5px; padding: 1px 6px; }
+
+/* 主城面板 Lv2+ 一屏化微调（第八十四次修订）：收紧纵向节奏 */
+.cc-body { padding: 2px 30px 14px; }
+.cc-hero { margin: 0 0 0; }
+.cc-level { font-size: 34px; }
+.cc-grid { margin: 10px 0 4px; gap: 8px 12px; }
+.cc-row { padding: 8px 14px; }
+.cc-tier { margin: 12px 0 2px; }
+.cc-unlock { margin: 8px 0 0; }

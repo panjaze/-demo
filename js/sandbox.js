@@ -47,7 +47,6 @@ const Sandbox = {
   dropPreview: null,       // 拖卡时的落点预览 { handIdx, key, gx?, gy? }（gx/gy = 光标下的锚点格）
   hoverTile: null,         // 光标下的格子（建造模式的跟随预览用，pointermove 维护）
   plateImg: null,          // 当前底图 Image（mapVisual 底板层）
-  reclaimImg: null,        // 官道开垦层 Image（只在官道格有像素；未加载则铺路全用带状路）
   plateId: null,           // 当前底图 id（CFG.mapVisual.plates 的键）
   plateBaked: false,       // 该底图是否自带烘焙网格（自带则代码网格关闭）
   plateCache: {},          // 底图缓存 { src: Image }
@@ -60,7 +59,11 @@ const Sandbox = {
     if (!this.canvas) return;
     this.ctx = this.canvas.getContext('2d');
     this.sprites = {};            // 已加载的建筑贴图 { farm: Image, ... }
+    this.terrainSprites = { mountain: [], tree: [] };   // 立体地形素材（第七十八次修订补充）
+    this.isoPaintedImg = null;    // 等轴手绘沙盘底图（AI 生成，第七十八次修订补充）
     this.loadSprites();
+    this.loadTerrainPropsImgs();
+    this.loadIsoPainted();
     this.resize();
     if (typeof global.addEventListener === 'function') {
       global.addEventListener('resize', () => { this.resize(); });
@@ -87,7 +90,43 @@ const Sandbox = {
     return !!this.dropPreview;
   },
 
-  /** 建筑贴图预载（CFG.assets 关闭或环境无 Image 时保持 emoji 渲染） */
+  /** 等轴手绘沙盘底图加载（第七十八次修订补充；2026-10-12 扩展双版）：
+   *  A = iso-painted2.jpg（木框沙盘）常驻；B = iso-painted3.jpg（延展铺满）按开关切换 */
+  loadIsoPainted() {
+    const load = (cfg, slot) => {
+      if (!cfg || typeof Image === 'undefined') return;
+      const im = new Image();
+      im.onload = () => { this[slot] = im; };
+      im.src = cfg.src;
+    };
+    load(CFG.mapVisual.isoPainted, 'isoPaintedImg');
+    load(CFG.mapVisual.isoPaintedB, 'isoPaintedBImg');
+  },
+
+  /** 当前生效的等轴成图（B 开关优先，未加载/未启用回退 A）；null = 无成图走回退链 */
+  isoPaintedActive() {
+    if (CFG.mapVisual.isoPaintedBOn && this.isoPaintedBImg && CFG.mapVisual.isoPaintedB)
+      return { img: this.isoPaintedBImg, cfg: CFG.mapVisual.isoPaintedB };
+    if (this.isoPaintedImg && CFG.mapVisual.isoPainted)
+      return { img: this.isoPaintedImg, cfg: CFG.mapVisual.isoPainted };
+    return null;
+  },
+
+  /** 立体地形素材加载（第七十八次修订补充）：assets/map/props/ 下的山/树透明 PNG */
+  loadTerrainPropsImgs() {
+    const files = { mountain: ['mountain-1.png'], tree: ['tree-1.png'] };
+    Object.keys(files).forEach((kind) => {
+      files[kind].forEach((f) => {
+        if (typeof Image === 'undefined') return;
+        const img = new Image();
+        img.onload = () => {
+          if (this.terrainSprites && this.terrainSprites[kind]) this.terrainSprites[kind].push(img);
+        };
+        img.src = 'assets/map/props/' + f;
+      });
+    });
+  },
+
   loadSprites() {
     this.sprites = {};
     if (!CFG.assets || !CFG.assets.enabled) return;
@@ -118,60 +157,6 @@ const Sandbox = {
     }
     /* 地图底板（环境层）：按 CFG.mapVisual.activePlate 加载，缺失时回退程序化草地 */
     this.loadPlate(CFG.mapVisual && CFG.mapVisual.activePlate);
-    /* 官道开垦层：铺在官道格上 = 把长草旧径开垦成清晰官道（加载失败只影响观感，不影响玩法） */
-    this.loadReclaim();
-  },
-
-  /** 加载官道开垦层；无 Image / 路径缺失时保持 null → drawRoads 自动退化为带状路 */
-  loadReclaim() {
-    const src = CFG.mapVisual && CFG.mapVisual.road && CFG.mapVisual.road.reclaimSrc;
-    this.reclaimImg = null;
-    this.reclaimCells = null;
-    if (!src || typeof global.Image !== 'function') return false;
-    const cached = this.plateCache[src];
-    if (cached && cached.complete) { this.reclaimImg = cached; this.buildReclaimCells(cached); return true; }
-    const im = new global.Image();
-    im.onload = () => { this.reclaimImg = im; this.buildReclaimCells(im); };
-    im.onerror = () => { this.reclaimImg = null; };
-    im.src = src;
-    this.plateCache[src] = im;
-    return true;
-  },
-
-  /**
-   * 逐格测量官道开垦层里"官道路面占这格多少"。
-   * ★ 存覆盖率而不是布尔值：素材是逐格从底图里剥离出来的，既可能整格没有像素
-   *   （官道列表与美术走向有偏差），也可能把邻格的路溢进来一小块。
-   *   覆盖率落在 [8%, 55%] 才判为"这一格能贴回真官道"：
-   *     · 低于 8%  → 该格底图本来就没画路（或只剩个角），贴了等于没贴；
-   *     · 高于 55% → 那是底图里的大片空地/路口广场，单独一格铺路却露出一大片土场
-   *                  （实测素材 v1 版有 (8,6)=93% 这种，正是用户嫌弃的"方块"观感）。
-   *   两头都退化为程序化带状路，视觉不断、不突兀。
-   */
-  buildReclaimCells(im) {
-    try {
-      const cv = document.createElement('canvas');
-      cv.width = im.width; cv.height = im.height;
-      const cx = cv.getContext('2d');
-      cx.drawImage(im, 0, 0);
-      const d = cx.getImageData(0, 0, im.width, im.height).data;
-      const st = im.width / CFG.map.cols;             // 素材每格边长
-      const set = {};
-      (CFG.map.officialRoads || []).forEach((r) => {
-        let sum = 0, n = 0;
-        const x0 = Math.floor(r.gx * st), y0 = Math.floor(r.gy * st);
-        for (let y = y0; y < y0 + st; y += 3) {
-          for (let x = x0; x < x0 + st; x += 3) {
-            sum += d[(y * im.width + x) * 4 + 3]; n++;
-          }
-        }
-        const cov = sum / n / 255;
-        if (cov >= 0.08 && cov <= 0.55) set[r.gx + ',' + r.gy] = cov;
-      });
-      this.reclaimCells = set;
-    } catch (e) {
-      this.reclaimCells = null;   // 像素读取失败（如跨域污染）→ 全部按有像素处理
-    }
   },
 
   /** 加载指定 id 的底图（带缓存）；bakedGrid 底图会关闭代码网格 */
@@ -233,7 +218,7 @@ const Sandbox = {
     put(ca, P - W, P + H, true, true);       put(ca, P + W, P + H, true, true);
 
     /* ② 整张模糊 + 轻微压暗 → 外圈"退到远处" */
-    if ('filter' in cb) cb.filter = 'blur(18px) brightness(0.86) saturate(0.92)';
+    if ('filter' in cb) cb.filter = 'blur(8px) brightness(0.92) saturate(0.95)';
     cb.drawImage(a, 0, 0);
     if ('filter' in cb) cb.filter = 'none';
 
@@ -241,7 +226,7 @@ const Sandbox = {
     cb.drawImage(im, P, P, W, H);
 
     /* ④ 地图四边向内收的暗角 → 柔化"清晰 / 模糊"的接缝，读作地图边界 */
-    const EDGE = 130, dark = 0.34;
+    const EDGE = 180, dark = 0.46;
     const shade = (x0, y0, x1, y1, rx, ry, rw, rh) => {
       const g = cb.createLinearGradient(x0, y0, x1, y1);
       g.addColorStop(0, 'rgba(12,16,10,' + dark + ')');
@@ -307,9 +292,50 @@ const Sandbox = {
     this.clampCam();
   },
 
+  /* ==================== 等轴测投影（第七十四次修订 MVP） ====================
+   * isoMode=true 时所有"格心"统一经 tileCX/tileCY 取值（双模式：iso 返回菱形中心，
+   * 正交返回原 (gx+0.5)*T），各绘制函数只换格心取值即可双模式兼容；回退 = 关 isoMode。
+   * 菱形尺寸 HW:HH 由 CFG.mapVisual.iso 的 hw/hh 决定（当前 60:15 = 4:1 缓倾斜，非 2:1 标准）；台基（带侧壁）由 drawIsoWorld 绘制。 */
+
+  isoOn() {
+    const V = CFG.mapVisual;
+    return !!(V && V.isoMode);
+  },
+  isoHW() { return (CFG.mapVisual.iso && CFG.mapVisual.iso.hw) || CFG.map.tile; },
+  isoHH() { return (CFG.mapVisual.iso && CFG.mapVisual.iso.hh) || CFG.map.tile / 2; },
+  isoOX() { return CFG.map.rows * this.isoHW(); },        // 最左列格心 x ≥ 半宽
+  isoOY() { return this.isoHH() * 1.5; },                 // 顶格顶点 y = OY - HH
+
+  /** 格 (gx,gy) 菱形中心 X（世界逻辑坐标；正交模式 = 原格心） */
+  tileCX(gx, gy) {
+    if (!this.isoOn()) return (gx + 0.5) * CFG.map.tile;
+    return this.isoOX() + (gx - gy) * this.isoHW();
+  },
+  /** 格 (gx,gy) 菱形中心 Y */
+  tileCY(gx, gy) {
+    if (!this.isoOn()) return (gy + 0.5) * CFG.map.tile;
+    return this.isoOY() + (gx + gy) * this.isoHH();
+  },
+  /** 把一个菱形（或正交退化方块）加入 path —— 供草地/高亮/幽灵复用 */
+  diamondPath(ctx, gx, gy) {
+    const T = CFG.map.tile;
+    ctx.beginPath();
+    if (!this.isoOn()) { ctx.rect(gx * T, gy * T, T, T); return; }
+    const cx = this.tileCX(gx, gy), cy = this.tileCY(gx, gy);
+    const hw = this.isoHW(), hh = this.isoHH();
+    ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy);
+    ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath();
+  },
+
   clampCam() {
-    const lw = CFG.map.cols * CFG.map.tile * this.scale;
-    const lh = CFG.map.rows * CFG.map.tile * this.scale;
+    let lw, lh;
+    if (this.isoOn()) {
+      lw = (CFG.map.cols + CFG.map.rows + 2) * this.isoHW() * this.scale;
+      lh = (CFG.map.cols + CFG.map.rows + 4) * this.isoHH() * this.scale;
+    } else {
+      lw = CFG.map.cols * CFG.map.tile * this.scale;
+      lh = CFG.map.rows * CFG.map.tile * this.scale;
+    }
     if (lw <= this.cw) this.camX = (lw - this.cw) / 2;
     else this.camX = Math.min(Math.max(this.camX, 0), lw - this.cw);
     if (lh <= this.ch) this.camY = (lh - this.ch) / 2;
@@ -325,7 +351,15 @@ const Sandbox = {
     const oldT = CFG.map.tile * this.scale;
     const gx = (ax + this.camX) / oldT;
     const gy = (ay + this.camY) / oldT;
-    this.scale = Math.min(2.2, Math.max(0.45, this.scale * f));
+    /* 缩放下限动态化：地图至少覆盖视口 92% —— 消除缩太小时的"清晰地图浮在模糊背景上"画中画 */
+    /* 缩放下限动态化（画中画修复）：地图至少覆盖视口 92%。
+     * ⚠️ 世界尺寸随视角不同：等轴菱形 = (cols+rows)×HW / ×HH（2640×1320），
+     *    正交 = cols×T / rows×T（1740×900）——2:1 等轴下沿用正交尺寸会缩不出全图。 */
+    const isoNow = this.isoOn();
+    const mw = isoNow ? (CFG.map.cols + CFG.map.rows) * this.isoHW() : CFG.map.cols * CFG.map.tile;
+    const mh = isoNow ? (CFG.map.cols + CFG.map.rows) * this.isoHH() : CFG.map.rows * CFG.map.tile;
+    const minS = Math.max(0.45, Math.min(this.cw / mw, this.ch / mh) * 0.92);
+    this.scale = Math.min(2.2, Math.max(minS, this.scale * f));
     const newT = CFG.map.tile * this.scale;
     this.camX = gx * newT - ax;
     this.camY = gy * newT - ay;
@@ -334,6 +368,13 @@ const Sandbox = {
 
   /** 让某格居中（用于「视角回城」） */
   centerOn(gx, gy) {
+    if (this.isoOn()) {
+      const hw = this.isoHW() * this.scale, hh = this.isoHH() * this.scale;
+      this.camX = this.isoOX() * this.scale + (gx - gy) * hw - this.cw / 2;
+      this.camY = this.isoOY() * this.scale + (gx + gy) * hh - this.ch / 2;
+      this.clampCam();
+      return;
+    }
     const T = CFG.map.tile * this.scale;
     this.camX = (gx + 0.5) * T - this.cw / 2;
     this.camY = (gy + 0.5) * T - this.ch / 2;
@@ -343,6 +384,12 @@ const Sandbox = {
   /** 格子坐标 → 面板像素（DOM 城市格用它对齐 Canvas） */
   tileRect(gx, gy) {
     const t = CFG.map.tile * this.scale;
+    if (this.isoOn()) {
+      const cx = this.isoOX() * this.scale + this.offX + (gx - gy) * this.isoHW() * this.scale;
+      const cy = this.isoOY() * this.scale + this.offY + (gx + gy) * this.isoHH() * this.scale;
+      const w = this.isoHW() * 2 * this.scale, h = this.isoHH() * 2 * this.scale;
+      return { x: cx - w / 2, y: cy - h / 2, w: w, h: h };
+    }
     return { x: this.offX + gx * t, y: this.offY + gy * t, w: t, h: t };
   },
 
@@ -354,8 +401,26 @@ const Sandbox = {
     const T = CFG.map.tile;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.fillStyle = COL.bg;
-    ctx.fillRect(0, 0, this.cw, this.ch);
+    /* 等轴模式 = 作战沙盘：背景是作战室的深木色桌面（横纹+暖光暗角），
+     * 沙盘木框由 drawIsoWorld 绘制（框外桌面、框内沙盘本体） */
+    if (this.isoOn()) {
+      /* 手绘沙盘成图（A 木框版 / B 延展铺满版）自带桌面与光效 → 程序化桌面只在无成图时兜底 */
+      if (!this.isoPaintedActive()) {
+        ctx.fillStyle = '#3a2d1e';
+        ctx.fillRect(0, 0, this.cw, this.ch);
+        ctx.fillStyle = '#453622';
+        for (let y = 36; y < this.ch; y += 72) ctx.fillRect(0, y, this.cw, 36);
+        const lamp = ctx.createRadialGradient(this.cw / 2, this.ch * 0.4, this.ch * 0.2, this.cw / 2, this.ch * 0.4, Math.max(this.cw, this.ch) * 0.85);
+        lamp.addColorStop(0, 'rgba(255,214,150,0.14)');
+        lamp.addColorStop(0.6, 'rgba(0,0,0,0.05)');
+        lamp.addColorStop(1, 'rgba(0,0,0,0.42)');
+        ctx.fillStyle = lamp;
+        ctx.fillRect(0, 0, this.cw, this.ch);
+      }
+    } else {
+      ctx.fillStyle = COL.bg;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+    }
 
     // 用 try/finally 兜底：任何一处绘制异常都不会把画布变换留在脏状态
     this.drainFx();          // 先消费逻辑层的特效事件（drawBuildings 要用 pop 变形）
@@ -364,19 +429,24 @@ const Sandbox = {
       ctx.translate(this.offX, this.offY);
       ctx.scale(this.scale, this.scale);
 
-      this.drawTiles(ctx, T);
-      this.drawRoads(ctx, T);
-      this.drawObjects(ctx, T);
-      this.drawBuildings(ctx, T);
-      this.drawMapLabels(ctx, T);
-      this.drawSelection(ctx, T);
-      this.drawDropPreview(ctx, T);
-      this.drawRoadPreview(ctx, T);
-      this.drawTowerRange(ctx, T);
-      this.drawPlaceMode(ctx, T);
-      this.drawTroops(ctx, T);
-      this.drawMarching(ctx, T);
-      this.drawMoves(ctx, T);
+      if (this.isoOn()) {
+        /* ★ 等轴测世界（第七十四次修订 MVP）：草地/地形/路/物体/信息牌全部走 iso 绘制 */
+        this.drawIsoWorld(ctx, T);
+      } else {
+        this.drawTiles(ctx, T);
+        this.drawRoads(ctx, T);
+        this.drawObjects(ctx, T);
+        this.drawBuildings(ctx, T);
+        this.drawMapLabels(ctx, T);
+        this.drawSelection(ctx, T);
+        this.drawDropPreview(ctx, T);
+        this.drawRoadPreview(ctx, T);
+        this.drawTowerRange(ctx, T);
+        this.drawPlaceMode(ctx, T);
+        this.drawTroops(ctx, T);
+        this.drawMarching(ctx, T);
+        this.drawMoves(ctx, T);
+      }
       this.drawFx(ctx, T);   // 特效在最上层（爆炸/飘字/光环）
     } catch (e) {
       if (!this._errShown) { this._errShown = true; console.error('[Sandbox] 绘制异常：', e); }
@@ -396,6 +466,22 @@ const Sandbox = {
       const exposed = mw * this.scale < this.cw || mh * this.scale < this.ch;
       if (exposed && this.plateExt) ctx.drawImage(this.plateExt, -P, -P, mw + P * 2, mh + P * 2);
       else ctx.drawImage(this.plateImg, 0, 0, mw, mh);
+      /* 光照立体层（第七十七次修订补充）：全局西北亮→东南暗，给平面地图加体积感 */
+      const lg = ctx.createLinearGradient(0, 0, mw, mh);
+      lg.addColorStop(0, 'rgba(255,244,214,0.10)');
+      lg.addColorStop(0.55, 'rgba(0,0,0,0)');
+      lg.addColorStop(1, 'rgba(8,14,8,0.17)');
+      ctx.fillStyle = lg;
+      ctx.fillRect(0, 0, mw, mh);
+      /* 地形光照层（第七十八次修订·样板）：逐格上受光/下投影 + 水域岸线 */
+      if (CFG.mapVisual.terrainLight && CFG.mapVisual.terrainLight.on) {
+        this.drawTerrainLighting(ctx, T, CFG.mapVisual.terrainLight.bbox);
+      }
+      /* 立体地形覆盖层（第七十八次修订补充）：俯视符号 → 立体模型（山棱面+雪顶 / 立体树）
+       * 攻城掠地式立体感来源：素材本身画成立体模型，而非空间投影 */
+      if (CFG.mapVisual.terrainProps !== false) {
+        this.drawTerrainProps(ctx, T);
+      }
     } else {
       for (let gy = 0; gy < CFG.map.rows; gy++) {
         for (let gx = 0; gx < CFG.map.cols; gx++) {
@@ -445,6 +531,142 @@ const Sandbox = {
    * · 建造模式：整体增强（加亮加粗），配合占地高亮让玩家看清格子边界
    * 抖动是 hash 确定性的，逐帧稳定不闪烁
    */
+  /**
+   * 立体地形覆盖层（第七十八次修订补充）：把底图上的俯视山/树符号替换为立体模型插画。
+   * 山 = 主峰棱面（左亮右暗）+ 雪顶 + 接触阴影，可超格向上；树 = 树干 + 双层树冠，每格 2~3 棵。
+   * 位置由地形码决定（P2.6 底图按地形数据绘制，格对齐有保证）；hash 决定格内偏移与变体。
+   */
+  drawTerrainProps(ctx, T) {
+    const G = global.Game;
+    const ter = CFG.map.terrain;
+    if (!ter) return;
+    for (let gy = 0; gy < CFG.map.rows; gy++) {
+      for (let gx = 0; gx < CFG.map.cols; gx++) {
+        const t = ter[gy] && ter[gy][gx];
+        if (t !== 'M' && t !== 'F' && t !== 'f') continue;
+        const r1 = hash2(gx * 3 + 1, gy * 7 + 2), r2 = hash2(gx * 5 + 3, gy * 11 + 4);
+        const cx = (gx + 0.5) * T + (r1 - 0.5) * T * 0.24;
+        const cy = (gy + 0.5) * T + (r2 - 0.5) * T * 0.18;
+        if (t === 'M') {
+          /* 接触阴影 */
+          ctx.fillStyle = 'rgba(20,26,16,0.30)';
+          ctx.beginPath(); ctx.ellipse(cx + T * 0.06, cy + T * 0.30, T * 0.46, T * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+          /* 素材优先：手绘水彩立体山（hy image 生成 → 白底键出） */
+          const msp = this.terrainSprites && this.terrainSprites.mountain && this.terrainSprites.mountain[r2 > 0.5 ? 0 : 0];
+          if (msp) {
+            const w = T * 1.5, h = w * (msp.height / msp.width);
+            ctx.drawImage(msp, cx - w / 2, cy + T * 0.30 - h, w, h);
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = '700 ' + Math.round(T * 0.2) + 'px system-ui, sans-serif';
+            return;
+          }
+          /* 山体：左棱亮面 + 右棱暗面（统一西北光） */
+          const h = T * (1.05 + r2 * 0.35);
+          ctx.fillStyle = '#9aa48f';
+          ctx.beginPath();
+          ctx.moveTo(cx - T * 0.46, cy + T * 0.26);
+          ctx.lineTo(cx - T * 0.10, cy + T * 0.26 - h);
+          ctx.lineTo(cx + T * 0.06, cy + T * 0.26 - h * 0.82);
+          ctx.lineTo(cx + T * 0.30, cy + T * 0.26);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#71796c';
+          ctx.beginPath();
+          ctx.moveTo(cx - T * 0.10, cy + T * 0.26 - h);
+          ctx.lineTo(cx + T * 0.06, cy + T * 0.26 - h * 0.82);
+          ctx.lineTo(cx + T * 0.30, cy + T * 0.26);
+          ctx.lineTo(cx + T * 0.02, cy + T * 0.26 - h * 0.55);
+          ctx.closePath(); ctx.fill();
+          /* 雪顶 */
+          ctx.fillStyle = '#eef2f4';
+          ctx.beginPath();
+          ctx.moveTo(cx - T * 0.10, cy + T * 0.26 - h);
+          ctx.lineTo(cx + T * 0.02, cy + T * 0.26 - h * 0.80);
+          ctx.lineTo(cx - T * 0.02, cy + T * 0.26 - h * 0.72);
+          ctx.lineTo(cx - T * 0.06, cy + T * 0.26 - h * 0.78);
+          ctx.closePath(); ctx.fill();
+        } else {
+          /* 树 ×2~3：树干 + 深色底层树冠 + 亮色顶层树冠 + 高光 */
+          const n = 2 + (r1 > 0.5 ? 1 : 0);
+          const tsp = this.terrainSprites && this.terrainSprites.tree && this.terrainSprites.tree[0];
+          for (let i = 0; i < n; i++) {
+            const rr = hash2(gx * 13 + i * 7, gy * 17 + i * 3);
+            const tx = cx + (rr - 0.5) * T * 0.62;
+            const ty = cy + (hash2(gx + i, gy * 3 + i) - 0.5) * T * 0.4;
+            const s = T * (0.16 + rr * 0.08);
+            /* 素材优先：手绘水彩树 */
+            if (tsp) {
+              const tw = s * 2.6, th = tw * (tsp.height / tsp.width);
+              ctx.save();
+              if (rr > 0.5) { ctx.translate(tx, ty); ctx.scale(-1, 1); ctx.translate(-tx, -ty); }
+              ctx.drawImage(tsp, tx - tw / 2, ty + T * 0.18 - th, tw, th);
+              ctx.restore();
+              continue;
+            }
+            ctx.fillStyle = 'rgba(20,26,16,0.25)';
+            ctx.beginPath(); ctx.ellipse(tx + s * 0.2, ty + s * 0.9, s * 0.9, s * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#6b4f30';
+            ctx.fillRect(tx - s * 0.09, ty, s * 0.18, s * 0.85);
+            ctx.fillStyle = '#3e5c33';
+            ctx.beginPath(); ctx.arc(tx, ty - s * 0.35, s * 0.62, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#4e7240';
+            ctx.beginPath(); ctx.arc(tx - s * 0.12, ty - s * 0.5, s * 0.46, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#5f8a4d';
+            ctx.beginPath(); ctx.arc(tx - s * 0.18, ty - s * 0.6, s * 0.28, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      }
+    }
+  },
+
+  /**
+   * 地形光照层（第七十八次修订·样板）：逐格"上受光 / 下投影" + 水域岸线。
+   * 统一光照方向 = 西北受光 / 东南投影；山体加强、森林投影、水陆岸线。
+   * bbox 限定样板区；验收后放开为全图。纯叠加，不改玩法与判定。
+   */
+  drawTerrainLighting(ctx, T, bbox) {
+    const G = global.Game;
+    const ter = CFG.map.terrain;
+    if (!ter || !bbox) return;
+    const isLand = function (gx, gy) {
+      if (gx < 0 || gy < 0 || gx >= CFG.map.cols || gy >= CFG.map.rows) return false;
+      const t = ter[gy] && ter[gy][gx];
+      return t !== 'W';
+    };
+    for (let gy = bbox.y0; gy <= bbox.y1; gy++) {
+      for (let gx = bbox.x0; gx <= bbox.x1; gx++) {
+        if (gx < 0 || gy < 0 || gx >= CFG.map.cols || gy >= CFG.map.rows) continue;
+        const t = ter[gy] && ter[gy][gx];
+        if (!t || t === '.') continue;
+        const x = gx * T, y = gy * T;
+        if (t === 'M') {
+          /* 山体：上 42% 受光亮带 / 下 42% 投影暗带（山顶亮、山脚沉） */
+          ctx.fillStyle = 'rgba(255,244,214,0.11)';
+          ctx.fillRect(x, y, T, T * 0.42);
+          ctx.fillStyle = 'rgba(10,14,8,0.20)';
+          ctx.fillRect(x, y + T * 0.58, T, T * 0.42);
+        } else if (t === 'F' || t === 'f') {
+          /* 森林：南缘投影带（树冠投下的林影） */
+          ctx.fillStyle = 'rgba(10,14,8,0.13)';
+          ctx.fillRect(x, y + T * 0.66, T, T * 0.34);
+        } else if (t === 'W') {
+          /* 水域岸线：与陆地相邻的边 → 陆侧投影 + 水内缘高光 */
+          const banks = [];
+          if (isLand(gx, gy - 1)) banks.push([x, y, x + T, y, 0, -1]);
+          if (isLand(gx, gy + 1)) banks.push([x, y + T, x + T, y + T, 0, 1]);
+          if (isLand(gx - 1, gy)) banks.push([x, y, x, y + T, -1, 0]);
+          if (isLand(gx + 1, gy)) banks.push([x + T, y, x + T, y + T, 1, 0]);
+          banks.forEach(function (b) {
+            ctx.strokeStyle = 'rgba(10,14,8,0.18)'; ctx.lineWidth = Math.max(2, T * 0.05);
+            ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(b[2], b[3]); ctx.stroke();
+            ctx.strokeStyle = 'rgba(214,232,244,0.14)'; ctx.lineWidth = Math.max(1.5, T * 0.035);
+            ctx.beginPath(); ctx.moveTo(b[0] + b[4] * T * 0.10, b[1] + b[5] * T * 0.10);
+            ctx.lineTo(b[2] + b[4] * T * 0.10, b[3] + b[5] * T * 0.10); ctx.stroke();
+          });
+        }
+      }
+    }
+  },
+
   drawGrid(ctx, T) {
     const G = CFG.mapVisual.grid;
     const j = G.jitter;
@@ -506,7 +728,7 @@ const Sandbox = {
     }
   },
 
-  /* 道路（第三十八次修订：铺路 = 开垦官道，官道格贴素材 + 其余画混合带状路） */
+  /* 道路（第八十二次修订收敛：带状路是路的唯一渲染，开垦层已随官道设定移除） */
   drawRoads(ctx, T) {
     const G = global.Game;
     if (!G || !G.state) return;
@@ -539,27 +761,14 @@ const Sandbox = {
       const gx = +p[0], gy = +p[1];
       if (!isWater(gx, gy)) cells.push([gx, gy]);
     }
-    /* 开垦层就绪 = 「官道格 + 该格素材覆盖率适中」才算能贴回真官道。
-     * ★ 第三十九次修订：官道格**同样先画带状路**，素材只是叠在上面加还原感。
-     *   早期版本让官道格跳过带状路、只贴素材，结果素材有缺陷的格直接变成断头路
-     *   （实测 13,8/14,8/15,8 三格路心色差 Δ≈2，等于整格没画）。
-     *   带状路兜底 → 任何一格都不会断；官道格再叠一层底图真路面，开垦感就在这一层。 */
-    const rec = this.reclaimImg;
-    const artCells = this.reclaimCells;
-    const isOff = (gx, gy) => {
-      if (!rec || typeof G.isOfficialRoad !== 'function' || !G.isOfficialRoad(gx, gy)) return false;
-      return !artCells || artCells[gx + ',' + gy] > 0;   // 像素表缺失时按全有处理
-    };
-
-    /* ① 带状路：相邻格两两连段（圆头带）——所有路格都画，官道格也不例外。
+    /* ① 带状路：相邻格两两连段（圆头带）。
      * ★ 桥所在的水格本身不画路面（露出底图木桥），但**两岸都要补半段接到桥边**，
      *   否则每个渡口两侧各留半格空白，路看起来到不了桥。
      *   四向都要检查：只往右/下连的话，桥"对面"那一侧永远没人接（实测踩过）。 */
-    const buildSegs = function (accept) {
+    const buildSegs = function () {
       const out = [];
       cells.forEach(function (c) {
         const gx = c[0], gy = c[1];
-        if (accept && !accept(gx, gy)) return;
         const cx = (gx + 0.5) * T, cy = (gy + 0.5) * T;
         const link = function (nx, ny, dx, dy) {
           if (!has(nx, ny)) return;
@@ -574,8 +783,7 @@ const Sandbox = {
       });
       return out;
     };
-    const segs = buildSegs(null);            // 全部路格
-    const offSegs = rec ? buildSegs(isOff) : [];   // 只有官道格（素材贴回后补路心用）
+    const segs = buildSegs();                // 全部路格
     const RB = R.ribbon;
     if (RB && segs.length) {
       const pass = function (L, w) {
@@ -592,7 +800,7 @@ const Sandbox = {
       ctx.save();
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       pass(RB.edge, RB.edgeWidth);   // 路缘压暗：路"陷进地里"
-      pass(RB.body, RB.width);       // 色相改官道土色（明暗纹理全保留）
+      pass(RB.body, RB.width);       // 色相统一为土色（明暗纹理全保留）
       if (RB.pig) pass(RB.pig, RB.pig.width);  // 薄着色：高亮农田底上不被洗掉
       pass(RB.lift, RB.liftWidth);   // 土壤提亮
       pass(RB.core, RB.coreWidth);   // 路心被踩亮的一条
@@ -603,7 +811,6 @@ const Sandbox = {
       const N = RB.pebbles || 0, M = RB.mottle || 0, TU = RB.tufts || 0;
       for (let n = 0; n < cells.length; n++) {
         const gx = cells[n][0], gy = cells[n][1];
-        if (isOff(gx, gy)) continue;
         const horiz = has(gx - 1, gy) || has(gx + 1, gy);
         const cx = (gx + 0.5) * T, cy = (gy + 0.5) * T;
         const dab = function (px, py, r1, r2, color, alpha) {
@@ -639,39 +846,6 @@ const Sandbox = {
         }
       }
       ctx.restore();
-    }
-
-    /* ③ 官道开垦：贴回清晰官道（盖在带状层之上，与底图旧径严丝合缝） */
-    if (rec) {
-      const st = rec.width / CFG.map.cols;    // 素材每格边长（底图与网格同构图）
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
-      for (let m = 0; m < cells.length; m++) {
-        if (!isOff(cells[m][0], cells[m][1])) continue;
-        const gx = cells[m][0], gy = cells[m][1];
-        ctx.drawImage(rec, gx * st, gy * st, st, st, gx * T, gy * T, T, T);
-      }
-      ctx.restore();
-
-      /* ④ 官道路心补提亮：素材是**盖在**带状层之上的，会把 ① 里的路心提亮整条盖掉，
-       *   结果官道格比非官道格暗一截（实测均值色差 41，肉眼能看出"新路更亮"）。
-       *   素材里的路条在生成时已归位到格心，所以这里沿同一条带补一道亮芯即可对齐。
-       *   （第四十次修订：用户既要"看得清"，也要两种路观感一致） */
-      if (RB && RB.core && offSegs.length) {
-        ctx.save();
-        ctx.globalCompositeOperation = RB.core.mode;
-        ctx.globalAlpha = RB.core.alpha * 0.75;
-        ctx.strokeStyle = RB.core.color;
-        ctx.lineWidth = T * RB.coreWidth * 0.7;
-        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.beginPath();
-        for (let i = 0; i < offSegs.length; i++) {
-          ctx.moveTo(offSegs[i][0], offSegs[i][1]); ctx.lineTo(offSegs[i][2], offSegs[i][3]);
-        }
-        ctx.stroke();
-        ctx.restore();
-      }
     }
   },
 
@@ -709,10 +883,17 @@ const Sandbox = {
       const owner = (G && G.state) ? G.resourceOwnerOf(r) : null;
       const cx = (r.gx + 0.5) * T, cy = (r.gy + 0.5) * T;
 
-      /* ① 接地阴影（据点比原来的 emoji 大，阴影同步放大） */
+      /* ① 接地阴影（据点比原来的 emoji 大，阴影同步放大）
+       * 2026-10-13 v2：同步等轴修复——硬边椭圆 → 柔边径向渐变（边缘羽化贴地） */
       ctx.save();
-      ctx.fillStyle = 'rgba(30,24,14,0.30)';
-      ctx.beginPath(); ctx.ellipse(cx + 2, cy + T * 0.32, T * 0.46, T * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.translate(cx + 2, cy + T * 0.32);
+      ctx.scale(1, 0.30);
+      const shgO = ctx.createRadialGradient(0, 0, 0, 0, 0, T * 0.46);
+      shgO.addColorStop(0, 'rgba(30,24,14,0.30)');
+      shgO.addColorStop(0.62, 'rgba(30,24,14,0.20)');
+      shgO.addColorStop(1, 'rgba(30,24,14,0)');
+      ctx.fillStyle = shgO;
+      ctx.beginPath(); ctx.arc(0, 0, T * 0.46, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
 
       /* ② 未占领：淡金色呼吸光 —— 唤起"这里是个目标"的注意（方案A） */
@@ -973,71 +1154,100 @@ const Sandbox = {
   drawTroops(ctx, T) {
     const G = global.Game;
     if (!G || !G.state) return;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
     const skip = {};
     (G.state.march || []).forEach(function (m) {
       const p = m.path[Math.min(m.idx, m.path.length - 1)];
       skip[p.gx + ',' + p.gy] = 1;
     });
-
     G.troopTiles().forEach((t) => {
-      const cx = (t.gx + 0.5) * T, cy = (t.gy + 0.5) * T;
       const both = t.p1 > 0 && t.p2 > 0;
       const stranded1 = t.p1 > 0 && G.isStrandedTroops(t.gx, t.gy, 'p1');
       const stranded2 = t.p2 > 0 && G.isStrandedTroops(t.gx, t.gy, 'p2');
-      const badge = (n, side, dx, hide, stranded) => {
-        if (n <= 0 || hide) return;
-        const col = side === 'p1' ? COL.p1 : COL.p2;
+      const dx = both ? -T * 0.22 : 0;
+      /* ★ 第八十一次修订：部队标识改回圆形徽章（用户反馈旗杆+三角旗+方块牌不好）——
+       *   深色圆底 + 阵营色描边 + 白字，滞留虚线+待命小字保留；行军箭头不受影响。 */
+      const badge = (n, side, ddx, stranded) => {
+        if (n <= 0) return;
+        const col = side === 'p1' ? '#2f6fb8' : '#c0392b';
+        const cx2 = (t.gx + 0.5) * T + ddx, cy2 = (t.gy + 0.5) * T;
         const r = T * 0.3;
-        ctx.beginPath(); ctx.arc(cx + dx, cy, r, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(8,14,22,0.92)'; ctx.fill();
-        /* ★ 滞留待命（软处理 2026-10-11）：虚线描边 + 「待命」小字，提示这支部队暂时调不动 */
         if (stranded) ctx.setLineDash([5, 4]);
         ctx.strokeStyle = col; ctx.lineWidth = stranded ? 2 : 3; ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = '#fff';
         ctx.font = '700 ' + Math.round(T * 0.27) + 'px system-ui, sans-serif';
-        ctx.fillText(String(n), cx + dx, cy + T * 0.02);
+        ctx.fillText(String(n), cx2, cy2 + T * 0.02);
         if (stranded) {
           ctx.fillStyle = 'rgba(255,255,255,0.72)';
           ctx.font = '600 ' + Math.round(T * 0.15) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
-          ctx.fillText('待命', cx + dx, cy + T * 0.42);
+          ctx.fillText('待命', cx2, cy2 + T * 0.42);
         }
       };
-      badge(t.p1, 'p1', both ? -T * 0.2 : 0, !!skip[t.gx + ',' + t.gy], stranded1);
-      badge(t.p2, 'p2', both ? T * 0.2 : 0, false, stranded2);
+      badge(t.p1, 'p1', dx, stranded1);
+      badge(t.p2, 'p2', both ? T * 0.24 : 0, stranded2);
     });
   },
 
-  /** 行军中的部队：画在插值位置上 + 一层阵营光晕 */
+  /** 部队兵力旗标（作战沙盘式，正交版）：旗杆 + 三角旗 + 兵力牌；滞留时旗面灰色 */
+  /** 行军部队（作战沙盘式，正交版）：剩余路径作战箭头 + 行军兵力牌 */
   drawMarching(ctx, T) {
     const G = global.Game;
     if (!G || !G.state) return;
-    const list = G.marchingTroops();
-    if (!list.length) return;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    list.forEach((m) => {
-      const cx = (m.x + 0.5) * T, cy = (m.y + 0.5) * T;
-      const col = m.side === 'p1' ? COL.p1 : COL.p2;
-
+    const self = this;
+    const secPerBase = CFG.soldier.marchSecPerTile;
+    G.state.march.forEach(function (m) {
+      const i = Math.min(m.idx, m.path.length - 2);
+      if (i < 0) return;
+      const k = Math.max(0, Math.min(1, (m.t || 0) / self.marchSpeedOf(m.side)));
+      const a = m.path[i], b = m.path[i + 1];
+      const hx = (a.gx + (b.gx - a.gx) * k + 0.5) * T;
+      const hy = (a.gy + (b.gy - a.gy) * k + 0.5) * T;
+      const col = m.side === 'p1' ? '#2f6fb8' : '#c0392b';
+      const lite = m.side === 'p1' ? '#9cc4ee' : '#f0a898';
+      /* 作战箭头：当前位置 → 目标（沿剩余路径），军事地图式 */
       ctx.save();
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = col;
-      ctx.beginPath(); ctx.arc(cx, cy, T * 0.44, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-
-      ctx.beginPath(); ctx.arc(cx, cy, T * 0.3, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(8,14,22,0.95)'; ctx.fill();
-      ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.92;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      for (let pi = i + 1; pi < m.path.length; pi++) {
+        ctx.lineTo((m.path[pi].gx + 0.5) * T, (m.path[pi].gy + 0.5) * T);
+      }
+      ctx.strokeStyle = col; ctx.lineWidth = 8; ctx.stroke();
+      ctx.strokeStyle = lite; ctx.lineWidth = 3.5; ctx.stroke();
+      /* 箭头头部（沿末段方向的后掠三角） */
+      const pe = m.path[m.path.length - 1], pp = m.path[m.path.length - 2] || a;
+      const ex = (pe.gx + 0.5) * T, ey = (pe.gy + 0.5) * T;
+      const px = (pp.gx + 0.5) * T, py = (pp.gy + 0.5) * T;
+      const ang = Math.atan2(ey - py, ex - px);
+      ctx.beginPath();
+      ctx.moveTo(ex + Math.cos(ang) * 14, ey + Math.sin(ang) * 14);
+      ctx.lineTo(ex + Math.cos(ang + 2.6) * 16, ey + Math.sin(ang + 2.6) * 16);
+      ctx.lineTo(ex + Math.cos(ang - 2.6) * 16, ey + Math.sin(ang - 2.6) * 16);
+      ctx.closePath();
+      ctx.fillStyle = col; ctx.fill();
+      /* 兵力小牌（行军中兵力） */
+      const bw = T * 0.44, bx = hx - bw / 2, by = hy + T * 0.18;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(8,14,22,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(bx + 4, by); ctx.lineTo(bx + bw - 4, by); ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + 4);
+      ctx.lineTo(bx + bw, by + T * 0.5 - 4); ctx.quadraticCurveTo(bx + bw, by + T * 0.5, bx + bw - 4, by + T * 0.5);
+      ctx.lineTo(bx + 4, by + T * 0.5); ctx.quadraticCurveTo(bx, by + T * 0.5, bx, by + T * 0.5 - 4);
+      ctx.lineTo(bx, by + 4); ctx.quadraticCurveTo(bx, by, bx + 4, by);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = '700 ' + Math.round(T * 0.27) + 'px system-ui, sans-serif';
-      ctx.fillText(String(m.n), cx, cy + T * 0.02);
+      ctx.font = '700 ' + Math.round(T * 0.22) + 'px system-ui, sans-serif';
+      ctx.fillText(String(m.n), hx, by + T * 0.38);
+      ctx.restore();
     });
   },
+
+  /** 行军速度（供沙盘箭头插值使用；转调 Game） */
+  marchSpeedOf(side) { return global.Game.marchSpeed(side); },
 
   addMove(x0, y0, x1, y1, side, n) {
     this.moves.push({ x0: x0, y0: y0, x1: x1, y1: y1, side: side, n: n, t0: performance.now() });
@@ -1124,7 +1334,8 @@ const Sandbox = {
       const f = this.fx[i];
       const p = (now - f.t0) / f.dur;
       const e = 1 - Math.pow(1 - p, 2);                       // easeOutQuad
-      const cx = (f.gx + 0.5) * T, cy = (f.gy + 0.5) * T;
+      /* 等轴模式下特效定位走投影（正交 = 原格心）—— 尺寸量仍用 T（逻辑） */
+      const cx = this.tileCX(f.gx, f.gy), cy = this.tileCY(f.gx, f.gy);
       const P1 = '#4a9eff', P2 = '#ff6b6b';
 
       if (f.kind === 'pop') {
@@ -1137,12 +1348,12 @@ const Sandbox = {
         ctx.strokeStyle = f.levelUp ? '#ffd23f' : '#e8dcc0';
         ctx.lineWidth = 3 * (1 - p) + 1;
         ctx.beginPath();
-        ctx.ellipse(cx, (f.gy + fp.h) * T - T * 0.06, rx * (0.5 + e * 0.9), ry * (0.5 + e * 0.9), 0, 0, Math.PI * 2);
+        ctx.ellipse(this.tileCX(f.gx, f.gy), this.tileCY(f.gx, f.gy + fp.h) - T * 0.06, rx * (0.5 + e * 0.9), ry * (0.5 + e * 0.9), 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.globalAlpha = (1 - p) * 0.35;
         ctx.strokeStyle = '#fff8e0';
         ctx.beginPath();
-        ctx.ellipse(cx, (f.gy + fp.h) * T - T * 0.06, rx * (0.3 + e * 0.55), ry * (0.3 + e * 0.55), 0, 0, Math.PI * 2);
+        ctx.ellipse(this.tileCX(f.gx, f.gy), this.tileCY(f.gx, f.gy + fp.h) - T * 0.06, rx * (0.3 + e * 0.55), ry * (0.3 + e * 0.55), 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
         continue;
@@ -1249,6 +1460,16 @@ const Sandbox = {
   /** 画布像素 → 格子坐标（点不到地图内返回 null） */
   pickTile(px, py) {
     const T = CFG.map.tile * this.scale;
+    if (this.isoOn()) {
+      const hw = this.isoHW() * this.scale, hh = this.isoHH() * this.scale;
+      const ox = this.isoOX() * this.scale + this.offX, oy = this.isoOY() * this.scale + this.offY;
+      const u = (px - ox) / hw, v = (py - oy) / hh;
+      const gx = Math.round((u + v) / 2), gy = Math.round((v - u) / 2);
+      if (gx < 0 || gy < 0 || gx >= CFG.map.cols || gy >= CFG.map.rows) return null;
+      const dx = px - (ox + (gx - gy) * hw), dy = py - (oy + (gx + gy) * hh);
+      if (Math.abs(dx) / hw + Math.abs(dy) / hh > 1.18) return null;   // 菱形内命中（1.18 容差）
+      return { gx: gx, gy: gy };
+    }
     const gx = Math.floor((px - this.offX) / T);
     const gy = Math.floor((py - this.offY) / T);
     if (gx < 0 || gy < 0 || gx >= CFG.map.cols || gy >= CFG.map.rows) return null;
@@ -1336,8 +1557,8 @@ const Sandbox = {
   tileToUI(gx, gy) {
     const T = CFG.map.tile * this.scale;
     return {
-      x: this.canvas.offsetLeft + gx * T + this.offX,
-      y: this.canvas.offsetTop + gy * T + this.offY,
+      x: this.canvas.offsetLeft + this.tileCX(gx, gy) * this.scale + this.offX,
+      y: this.canvas.offsetTop + this.tileCY(gx, gy) * this.scale + this.offY,
     };
   },
 
@@ -1393,10 +1614,12 @@ const Sandbox = {
     /* ★ 第七十二次修订：建筑/主城也补上名牌（此前贴图路径只有 Lv 角标没有名称，
      *   率土/三战的地图上每个对象都标名称 + 等级） */
     const bFont = '"PingFang SC","Microsoft YaHei",sans-serif';
-    const drawBuildPlate = function (b, name, level, owner) {
+    const drawBuildPlate = function (b, name, level, owner, topOverride) {
       const fp = G.footOf(b.type);
-      const cx = (b.gx + fp.w / 2) * T, topY = (b.gy + fp.h) * T + T * 0.06;
-      const txt = level ? name + '  Lv' + level : name;
+      const cx = (b.gx + fp.w / 2) * T;
+      /* ★ 第八十一次修订：主城 2×2 信息牌移到占地正上方（用户拍板：牌在底部会压到邻格牌/建筑） */
+      const topY = topOverride !== undefined ? topOverride : (b.gy + fp.h) * T + T * 0.06;
+      const txt = level ? name + ' Lv' + level : name;
       ctx.font = '700 ' + Math.round(T * 0.21) + 'px ' + bFont;
       const w = Math.max(70, ctx.measureText(txt).width) + T * 0.34;
       const h = T * 0.36;
@@ -1406,10 +1629,16 @@ const Sandbox = {
     };
     for (const k in G.state.buildings) {
       const b = G.state.buildings[k];
+      /* ★ 第八十一次修订：建筑牌改 hover 显示（建筑多了信息牌过密，用户拍板改回靠近才显示）——
+       *   光标在建筑占地（footOf w×h）内才画；主城/资源点牌保留常显。 */
+      const fp = G.footOf(b.type);
+      const hv = this.hoverTile;
+      if (!(hv && hv.gx >= b.gx && hv.gx < b.gx + fp.w && hv.gy >= b.gy && hv.gy < b.gy + fp.h)) continue;
       drawBuildPlate.call(this, b, CFG.buildings[b.type].name, b.level, (b.owner || 'p1') === 'p1' ? 'p1' : 'p2');
     }
-    drawBuildPlate.call(this, G.state.castle, '主城', G.state.castleLevel, 'p1');
-    drawBuildPlate.call(this, G.enemyCastle(), '敌方主城', 1, 'p2');
+    /* ★ 牌在 2×2 占地内部、主城贴图正上方的留白区（用户拍板：不占用格外空间） */
+    drawBuildPlate.call(this, G.state.castle, '主城', G.state.castleLevel, 'p1', G.state.castle.gy * T + T * 0.08);
+    drawBuildPlate.call(this, G.enemyCastle(), '敌方主城', 1, 'p2', G.enemyCastle().gy * T + T * 0.08);
 
     CFG.map.resources.forEach(function (r) {
       const owner = G.resourceOwnerOf(r);
@@ -1419,10 +1648,10 @@ const Sandbox = {
        *   新玩家不知道"占了有什么好处"正是资源点无吸引力的原因之一。
        * ★ 第七十三次修订（排查 2026-10-11 后用户拍板收窄）：产出去掉「/Tick」（速览牌，
        *   Tick 概念在玩法说明与引导步里讲过）、守军简写「守10」—— 旧版
-       *   「+50 粮/Tick · 守军10」把牌撑到 ~2.5 格宽、横跨邻格压住官道路基地界
+       *   「+50 粮/Tick · 守军10」把牌撑到 ~2.5 格宽、横跨邻格压住邻格地界
        *   （实锤：中央能源点的牌盖住 (15.5,8.0)，_roadvisual_verify 两项格缝断言被误伤）。
        *   同时修掉 measureText(l2) 误用 l1 大字号的既有问题（牌宽被高估）。 */
-      const yieldTxt = r.res === 'logistics' ? '自动铺路'
+      const yieldTxt = r.res === 'logistics' ? '修路 -1⚡'
         : ('+' + r.yield + (r.res === 'food' ? '粮' : '⚡'));
       const l1 = (owner ? (owner === 'p1' ? '★ ' : '✖ ') : '') + r.name;
       const l2 = yieldTxt + (!owner && guard > 0 ? ' · 守' + guard : '');
@@ -1478,6 +1707,600 @@ const Sandbox = {
         ctx.restore();
       }
     }
+  },
+
+  /* ==================== 等轴测世界绘制（第七十四次修订 MVP，isoMode=true 时由 render 调用） ==================== */
+
+  /** 菱形台基：顶面 + 两侧壁（攻城掠地式落地感），depth 为侧壁厚度 */
+  isoPedestal(ctx, gx, gy, hw, hh, depth, topFill, sideFill) {
+    const cx = this.tileCX(gx, gy), cy = this.tileCY(gx, gy);
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx, cy + hh + depth);
+    ctx.lineTo(cx - hw, cy + depth); ctx.closePath();
+    ctx.fillStyle = sideFill; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx, cy + hh + depth);
+    ctx.lineTo(cx + hw, cy + depth); ctx.closePath();
+    ctx.fillStyle = sideFill; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy);
+    ctx.closePath();
+    ctx.fillStyle = topFill; ctx.fill();
+  },
+
+  drawIsoWorld(ctx, T) {
+    const G = global.Game;
+    const S = G.state;
+    const self = this;
+    const HW = this.isoHW(), HH = this.isoHH();
+    const ter = CFG.map.terrain;
+    const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+    /* ---- ⓪ 沙盘木框：围住可玩区的木质托盘（框外=作战室桌面，由 render 背景承担）
+     *      手绘沙盘成图（A 木框版自带木框 / B 延展版无需框）→ 程序化框只在无成图时兜底 ---- */
+    const painted = this.isoPaintedActive();
+    const paintedOn = !!painted;
+    if (!paintedOn) {
+      const C = CFG.map.cols - 1, R = CFG.map.rows - 1;
+      const inner = {
+        top: [this.tileCX(0, 0), this.tileCY(0, 0) - HH],
+        right: [this.tileCX(C, 0) + HW, this.tileCY(C, 0)],
+        bottom: [this.tileCX(C, R), this.tileCY(C, R) + HH],
+        left: [this.tileCX(0, R) - HW, this.tileCY(0, R)],
+      };
+      const mx = (inner.top[0] + inner.bottom[0]) / 2, my = (inner.top[1] + inner.bottom[1]) / 2;
+      const K = 1.15;
+      const outer = {
+        top: [mx + (inner.top[0] - mx) * K, my + (inner.top[1] - my) * K],
+        right: [mx + (inner.right[0] - mx) * K, my + (inner.right[1] - my) * K],
+        bottom: [mx + (inner.bottom[0] - mx) * K, my + (inner.bottom[1] - my) * K],
+        left: [mx + (inner.left[0] - mx) * K, my + (inner.left[1] - my) * K],
+      };
+      const poly = o => `${o.top[0]},${o.top[1]} ${o.right[0]},${o.right[1]} ${o.bottom[0]},${o.bottom[1]} ${o.left[0]},${o.left[1]}`;
+      /* 底座投影（方向 2 打磨）：沙盘下方桌面上的落影，越靠近沙盘越暗，四角不再突兀 */
+      for (let i = 3; i >= 1; i--) {
+        const kk = K + i * 0.05;
+        ctx.beginPath();
+        poly(outer).split(' ').forEach(function (pt, j) {
+          const p = pt.split(',');
+          const px = mx + (+p[0] - mx) * kk, py = my + (+p[1] - my) * kk;
+          j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(10,6,2,' + (0.20 - i * 0.045) + ')'; ctx.fill();
+      }
+      /* 底座侧壁（沙盘是有厚度的实体托盘） */
+      ctx.save();
+      ctx.translate(0, 30);
+      ctx.beginPath();
+      const op = poly(outer).split(' ');
+      op.forEach(function (pt, i) { const p = pt.split(','); i ? ctx.lineTo(+p[0], +p[1]) : ctx.moveTo(+p[0], +p[1]); });
+      ctx.closePath();
+      ctx.fillStyle = '#3e2f1f'; ctx.fill();
+      ctx.restore();
+      /* 框顶面（木色）+ 木纹线 + 内缘铜线（草地随后覆盖内区，框即内缘之外的部分） */
+      ctx.beginPath();
+      poly(outer).split(' ').forEach(function (pt, i) { const p = pt.split(','); i ? ctx.lineTo(+p[0], +p[1]) : ctx.moveTo(+p[0], +p[1]); });
+      ctx.closePath();
+      ctx.fillStyle = '#5a4632'; ctx.fill();
+      ctx.strokeStyle = '#6a543a'; ctx.lineWidth = 2;
+      for (let f = 1; f <= 3; f++) {
+        const k = 1 + (K - 1) * (f / 4);
+        ctx.beginPath();
+        [[inner.top, 0], [inner.right, 0], [inner.bottom, 0], [inner.left, 0]].forEach(function (cor, i) {
+          const px = mx + (cor[0] - mx) * k, py = my + (cor[1] - my) * k;
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        });
+        ctx.closePath(); ctx.stroke();
+      }
+      /* 沙色过渡带（方向 2 打磨）：木框内缘与草地格之间的沙沿，消除生硬拼缝 */
+      ctx.save();
+      const sk = 1 + (K - 1) * 0.35;
+      ctx.beginPath();
+      [[inner.top], [inner.right], [inner.bottom], [inner.left]].forEach(function (cor, i) {
+        const px = mx + (cor[0][0] - mx) * sk, py = my + (cor[0][1] - my) * sk;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(216,199,154,0.9)'; ctx.fill();
+      ctx.restore();
+    }
+
+    /* ---- ①-a 手绘沙盘成图（方案A，2026-10-12）：i2i 生成的 2:1 手绘沙盘插画整幅铺底。
+     *      映射：成图菱形中心像素 (pc.cx,pc.cy) = 地图中心格格心，统一缩放 s = HW/pc.hw
+     *      （与 HH/pc.hh 严格相等，2:1 下均为 1.875）；成图已含立体山树/木框/桌面。 ---- */
+    if (paintedOn) {
+      const pc = painted.cfg;
+      const s = HW / pc.hw;
+      const imgP = painted.img;
+      const wxC = this.tileCX((CFG.map.cols - 1) / 2, (CFG.map.rows - 1) / 2);
+      const wyC = this.tileCY((CFG.map.cols - 1) / 2, (CFG.map.rows - 1) / 2);
+      ctx.drawImage(imgP, wxC - pc.cx * s, wyC - pc.cy * s, imgP.width * s, imgP.height * s);
+    /* ---- ①-b 手绘底图（等轴仿射，第七十六次修订补充）：正交手绘图经仿射直接变身为等轴底图。
+     *      变换矩阵：X = OX + (px-py)，Y = OY - HH + (px+py)·(HH/T) —— 线性映射格心精确对齐；
+     *      ⚠️ 纵向系数 kY = HH/T 随菱形比例联动（2:1→0.5 / 4:1→0.25），改 iso.hh 必须同步——
+     *      曾因硬编码 0.5 在 4:1 下底图与格网整体错位（用户实机抓出）。 ---- */
+    } else if (this.plateImg) {
+      const kY = this.isoHH() / CFG.map.tile;
+      ctx.save();
+      ctx.transform(1, kY, -1, kY, this.isoOX(), this.isoOY() - HH);
+      ctx.drawImage(this.plateImg, 0, 0);
+      ctx.restore();
+    } else {
+      /* 回退：程序化菱形草地 + 地形剪影（无手绘底图时） */
+      for (let gy = 0; gy < CFG.map.rows; gy++) {
+        for (let gx = 0; gx < CFG.map.cols; gx++) {
+          const r = hash2(gx, gy);
+          let c = (gx + gy) % 2 === 0 ? '#8fae66' : '#97b56d';
+          if (r < 0.10) c = '#84a25c';
+          else if (r > 0.92) c = '#a0bb76';
+          const t = ter && ter[gy] && ter[gy][gx];
+          if (t === 'W') c = '#7f9db4';
+          else if (t === 'M') c = '#9a9a92';
+          else if (t === 'F' || t === 'f') c = '#5f7f47';
+          ctx.beginPath();
+          this.diamondPath(ctx, gx, gy);
+          ctx.fillStyle = c; ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1; ctx.stroke();
+          /* 山 / 林剪影：平涂色块读作"露底的灰"，画出地形剪影才可读 */
+          const mcx = this.tileCX(gx, gy), mcy = this.tileCY(gx, gy);
+          if (t === 'M') {
+            ctx.fillStyle = '#6e746c';
+            ctx.beginPath();
+            ctx.moveTo(mcx - HW * 0.34, mcy + HH * 0.12); ctx.lineTo(mcx - HW * 0.10, mcy - HH * 0.5); ctx.lineTo(mcx + HW * 0.14, mcy + HH * 0.12);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#5c625b';
+            ctx.beginPath();
+            ctx.moveTo(mcx - HW * 0.06, mcy + HH * 0.3); ctx.lineTo(mcx + HW * 0.22, mcy - HH * 0.28); ctx.lineTo(mcx + HW * 0.46, mcy + HH * 0.3);
+            ctx.closePath(); ctx.fill();
+          } else if (t === 'F' || t === 'f') {
+            const trees = [[-0.3, 0.05, 0.30], [0.12, -0.18, 0.24], [0.30, 0.22, 0.27]];
+            trees.forEach(function (tr, ti) {
+              ctx.fillStyle = ti % 2 ? '#42603a' : '#4c6f42';
+              ctx.beginPath();
+              ctx.arc(mcx + HW * tr[0], mcy + HH * tr[1], HW * tr[2] * 0.42, 0, Math.PI * 2);
+              ctx.fill();
+            });
+          }
+        }
+      }
+    }
+
+    /* ---- ①-c 放置模式网格：已改「单格高亮」形态（2026-10-13 用户拍板）。
+     *  原「全图蓝网格」删除 —— 底图格线是 AI 手绘的（局部抖动、非几何精确），
+     *  引擎全网格是数学精确的，两者"处处对照"必然显出"不重合"（用户实机反馈）。
+     *  可放置反馈全部由「光标下的整块占地高亮」承担（合法=奶油 / 合并=绿 / 非法=红，
+     *  见 drawDropPreview 与 hover 高亮路径），不再铺满图网格。 ---- */
+
+    /* ---- ② 道路：带状路沿菱形格心连线（与正交同一套遍历/去重） ---- */
+    const roads = S.roads || {};
+    const has = function (gx, gy) { return !!roads[gx + ',' + gy]; };
+    const segs = [];
+    for (const k in roads) {
+      const p = k.split(',');
+      const gx = +p[0], gy = +p[1];
+      if (ter && ter[gy] && ter[gy][gx] === 'W') continue;   // 桥格不画路面
+      if (has(gx + 1, gy)) segs.push([gx, gy, gx + 1, gy]);
+      if (has(gx, gy + 1)) segs.push([gx, gy, gx, gy + 1]);
+    }
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    /* 2026-10-13（28 底图适配）：等轴路三层色降亮降白（原为旧底图标定，在 28 上"翻白"成贴纸感）。
+     *   ⚠️ 等轴路的颜色目前是这套硬编码色（正交路走 CFG.mapVisual.road.ribbon，两条绘制路径尚未统一）。 */
+    [[26, '#8f7752'], [17, '#b19a6d'], [9, '#c2ad82']].forEach(function (L) {
+      ctx.strokeStyle = L[1]; ctx.lineWidth = L[0];
+      ctx.beginPath();
+      segs.forEach(function (sg) {
+        ctx.moveTo(self.tileCX(sg[0], sg[1]), self.tileCY(sg[0], sg[1]));
+        ctx.lineTo(self.tileCX(sg[2], sg[3]), self.tileCY(sg[2], sg[3]));
+      });
+      ctx.stroke();
+    });
+    ctx.restore();
+
+    /* ---- ③ 深度排序物体层：建筑 / 资源据点 / 部队徽章 / 行军（z = gx+gy） ---- */
+    const items = [];
+    Object.keys(S.buildings || {}).forEach(function (k) {
+      const b = S.buildings[k];
+      items.push({ z: b.gx + b.gy, kind: 'building', o: b });
+    });
+    if (S.castle) items.push({ z: S.castle.gx + S.castle.gy, kind: 'castle', o: S.castle, lv: S.castleLevel, own: 'p1' });
+    if (S.enemyCastle) items.push({ z: S.enemyCastle.gx + S.enemyCastle.gy, kind: 'castle', o: S.enemyCastle, lv: S.enemyLevel || 1, own: 'p2' });
+    CFG.map.resources.forEach(function (r) {
+      items.push({ z: r.gx + r.gy, kind: 'resource', o: r });
+    });
+    for (const k in S.troops) {
+      const p = k.split(',');
+      const gx = +p[0], gy = +p[1];
+      const t = S.troops[k];
+      if ((t.p1 || 0) > 0) items.push({ z: gx + gy, kind: 'troop', o: { gx: gx, gy: gy, side: 'p1', n: t.p1 } });
+      if ((t.p2 || 0) > 0) items.push({ z: gx + gy + 0.01, kind: 'troop', o: { gx: gx, gy: gy, side: 'p2', n: t.p2 } });
+    }
+    (S.march || []).forEach(function (m) {
+      const c0 = m.path[Math.min(m.idx, m.path.length - 1)];
+      items.push({ z: c0.gx + c0.gy + 0.5, kind: 'march', o: m });
+    });
+    items.sort(function (a, b) { return a.z - b.z; });
+    const marchSec = function (m) { return G.marchSpeed(m.side); };   // marchSpeed 在 Game 上
+    const FLAG = { p1: '#2f6fb8', p2: '#c0392b' };
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === 'building') {
+        const b = it.o;
+        const fp = G.footOf(b.type);
+        const acx = b.gx + (fp.w - 1) / 2, acy = b.gy + (fp.h - 1) / 2;
+        const cx = this.tileCX(acx, acy), cy = this.tileCY(acx, acy);
+        const isEnemyCastle = (!G.isCastleAt(b.gx, b.gy)) && S.enemyCastle && S.enemyCastle.gx === b.gx && S.enemyCastle.gy === b.gy;
+        const own = b.owner || (isEnemyCastle ? 'p2' : 'p1');
+        /* 2026-10-13 用户拍板：程序化菱形台基已删，且**不画程序化软影**——
+         * 接地感全部由素材自带（重画素材含草地边缘自然收尾），"留素材草圈、撤引擎影子"。 */
+        ctx.save();
+        if (b.pending) ctx.globalAlpha = 0.55;
+        const sp = this.sprites && this.sprites[b.type];
+        /* ★ 第八十四次修订：绘制尺寸按占地等比（旧版固定 1.5HW —— 2×2 主城/兵营只画出
+         *   约 0.75 格宽，玩家看到"旁边有空地却建不了"的直接原因）；底缘从 cy+0.5HH
+         *   下移到"菱形下顶点略下"（草圈包住底尖）—— 悬空感的引擎侧根因之二。 */
+        const w = HW * 1.75 * fp.w, h = w * (sp ? sp.height / sp.width : 1);
+        const baseY = cy + HH * (fp.h + 0.22);
+        const pop = this.popOf(b.gx, b.gy, nowMs);
+        if (pop) { ctx.translate(cx, cy); ctx.scale(pop.kx, pop.ky); ctx.translate(-cx, -cy); }
+        if (sp) {
+          ctx.drawImage(sp, cx - w / 2, baseY - h, w, h);
+        } else {
+          const d2 = CFG.buildings[b.type];
+          ctx.font = Math.round(T * 0.62) + 'px serif';
+          ctx.fillText((d2 && d2.icon) || '🏠', cx, cy - HH * 0.35);
+        }
+        /* ★ 第八十四次修订：Lv 数字文字删除 —— 信息牌横幅已含等级（"主城 Lv1"），
+         *   底部再画一个金色 Lv 是重复信息，用户实机指出"像上版本的 Lv1 没删干净"。
+         *   等级信息：主城/建筑 = 信息牌（建筑 hover 显示）+ 点击建筑的面板。 */
+        if (b.hp !== undefined && b.maxHp && b.hp < b.maxHp) {
+          const bw = HW * 1.1 * fp.w, bx = cx - bw / 2, by = baseY - h - 10;
+          ctx.fillStyle = 'rgba(10,8,4,0.8)'; ctx.fillRect(bx - 1, by - 1, bw + 2, 6);
+          ctx.fillStyle = '#d9604a'; ctx.fillRect(bx, by, bw * Math.max(0, b.hp) / b.maxHp, 4);
+        }
+        ctx.restore();
+        continue;
+      }
+      if (it.kind === 'resource') {
+        const r = it.o;
+        const cx = this.tileCX(r.gx, r.gy), cy = this.tileCY(r.gx, r.gy);
+        const owner = G.resourceOwnerOf(r);
+        const guard = S.resGuard[r.gx + ',' + r.gy] || 0;
+        ctx.save();
+        /* 2026-10-13 深夜 v2："浮空感"三连修复之引擎侧——硬边椭圆 → 柔边径向渐变。
+         * 旧版硬边椭圆与素材底缘分离、"像悬空物投下的影子"；渐变影边缘羽化贴地，
+         * 位置贴合新锚定（素材紧裁后尖端=cy+0.55HH 画面底），光自西北 → 影略偏东南。 */
+        ctx.save();
+        ctx.translate(cx + HW * 0.05, cy + HH * 0.55);
+        ctx.scale(1, 0.44);
+        const shg = ctx.createRadialGradient(0, 0, 0, 0, 0, HW * 0.82);
+        shg.addColorStop(0, 'rgba(28,22,12,0.34)');
+        shg.addColorStop(0.62, 'rgba(28,22,12,0.23)');
+        shg.addColorStop(1, 'rgba(28,22,12,0)');
+        ctx.fillStyle = shg;
+        ctx.beginPath(); ctx.arc(0, 0, HW * 0.82, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        if (!owner) {
+          const ph = (nowMs / 1000) % 2.8 / 2.8;
+          const a = 0.09 + 0.12 * (1 - Math.abs(ph * 2 - 1));
+          const gr = ctx.createRadialGradient(cx, cy - HH * 0.2, T * 0.12, cx, cy - HH * 0.2, T * 0.95);
+          gr.addColorStop(0, 'rgba(255,224,138,' + a.toFixed(3) + ')');
+          gr.addColorStop(1, 'rgba(255,224,138,0)');
+          ctx.fillStyle = gr;
+          ctx.beginPath(); ctx.arc(cx, cy - HH * 0.2, T * 0.95, 0, Math.PI * 2); ctx.fill();
+        }
+        /* 2026-10-13 用户拍板：资源点的程序化台基一并删除（"其他资源点怎么还是全都有砖"）——
+         * 与建筑/主城统一"留素材草圈、撤引擎影子"：落地感由素材自带 + 上方的小接地阴影承担。 */
+        const sp = this.resSprites && this.resSprites[r.res];
+        if (sp) {
+          /* ★ 第八十四次修订：底缘从 0.55HH 下移到菱形下顶点略下（1.12HH）——
+           *   资源点"悬空感"的引擎侧根因（此前只柔化了影子，没动锚定）；宽度 1.5 → 1.75HW。 */
+          const w = HW * ((CFG.resourceCamps && CFG.resourceCamps.width) || 1.5), h = w * (sp.height / sp.width);
+          ctx.drawImage(sp, cx - w / 2, cy + HH * 1.12 - h, w, h);
+        } else {
+          const ico = r.res === 'food' ? '🌾' : (r.res === 'logistics' ? '🛣️' : '⚡');
+          ctx.font = Math.round(T * 0.5) + 'px serif';
+          ctx.fillText(ico, cx, cy - HH * 0.2);
+        }
+        if (owner && FLAG[owner]) {
+          const px = cx + HW * 0.5, top = cy - T * 0.72, base = cy + HH * 0.1;
+          ctx.strokeStyle = '#4a3520'; ctx.lineWidth = Math.max(2, T * 0.05);
+          ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, top); ctx.stroke();
+          const fw = T * 0.36, fh = T * 0.21;
+          ctx.fillStyle = FLAG[owner];
+          ctx.beginPath(); ctx.moveTo(px, top);
+          ctx.lineTo(px + fw, top + fh * 0.5); ctx.lineTo(px, top + fh);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        continue;
+      }
+      if (it.kind === 'castle') {
+        const c = it.o, own = it.own;
+        const fp = G.footOf('castle');
+        const acx = c.gx + (fp.w - 1) / 2, acy = c.gy + (fp.h - 1) / 2;
+        const cx = this.tileCX(acx, acy), cy = this.tileCY(acx, acy);
+        /* 2026-10-13：主城台基与程序化软影均已撤（同上，"留素材草圈、撤引擎影子"）。 */
+        ctx.save();
+        const sp = this.sprites && this.sprites.castle;
+        const w = HW * 1.75 * fp.w, h = w * (sp ? sp.height / sp.width : 1);
+        const baseC = cy + HH * (fp.h + 0.22);
+        if (sp) {
+          ctx.drawImage(sp, cx - w / 2, baseC - h, w, h);
+        } else {
+          ctx.font = Math.round(T * 0.8) + 'px serif';
+          ctx.fillText('🏰', cx, cy - HH * 0.4);
+        }
+        /* ★ 第八十四次修订：同上 —— 主城信息牌横幅已含等级，删底部重复 Lv 文字 */
+        const hp = own === 'p1' ? Math.max(0, S.castleHp) : Math.max(0, S.enemyCastle.hp);
+        const mx = own === 'p1' ? G.castleMaxHp() : (S.enemyCastle.maxHp || 1);
+        if (hp < mx) {
+          const bw = HW * 2.4, bx = cx - bw / 2, by = baseC - h - 10;
+          ctx.fillStyle = 'rgba(10,8,4,0.8)'; ctx.fillRect(bx - 1, by - 1, bw + 2, 6);
+          ctx.fillStyle = '#d9604a'; ctx.fillRect(bx, by, bw * hp / mx, 4);
+        }
+        ctx.restore();
+        continue;
+      }
+      if (it.kind === 'troop') {
+        const t = it.o;
+        const stranded = G.isStrandedTroops(t.gx, t.gy, t.side);
+        this.isoTroopBadge(ctx, t.gx, t.gy, t.side, t.n, stranded);
+        continue;
+      }
+      if (it.kind === 'march') {
+        const m = it.o;
+        const c0 = m.path[Math.min(m.idx, m.path.length - 1)];
+        const c1 = m.path[Math.min(m.idx + 1, m.path.length - 1)];
+        const k = Math.max(0, Math.min(1, (m.t || 0) / marchSec(m)));
+        const hx = this.tileCX(c0.gx, c0.gy) + (this.tileCX(c1.gx, c1.gy) - this.tileCX(c0.gx, c0.gy)) * k;
+        const hy = this.tileCY(c0.gx, c0.gy) + (this.tileCY(c1.gx, c1.gy) - this.tileCY(c0.gx, c0.gy)) * k;
+        const col = m.side === 'p1' ? '#2f6fb8' : '#c0392b';
+        const lite = m.side === 'p1' ? '#9cc4ee' : '#f0a898';
+        /* 作战沙盘箭头：当前位置 → 目标（沿剩余路径投影），军事地图式粗箭头 */
+        ctx.save();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.92;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        for (let pi = m.idx + 1; pi < m.path.length; pi++) {
+          ctx.lineTo(this.tileCX(m.path[pi].gx, m.path[pi].gy), this.tileCY(m.path[pi].gx, m.path[pi].gy));
+        }
+        ctx.strokeStyle = col; ctx.lineWidth = 8; ctx.stroke();
+        ctx.strokeStyle = lite; ctx.lineWidth = 3.5; ctx.stroke();
+        /* 箭头头部（沿末段方向的后掠三角） */
+        const pe = m.path[m.path.length - 1], pp = m.path[m.path.length - 2] || c0;
+        const ex = this.tileCX(pe.gx, pe.gy), ey = this.tileCY(pe.gx, pe.gy);
+        const px = this.tileCX(pp.gx, pp.gy), py = this.tileCY(pp.gx, pp.gy);
+        const ang = Math.atan2(ey - py, ex - px);
+        ctx.beginPath();
+        ctx.moveTo(ex + Math.cos(ang) * 14, ey + Math.sin(ang) * 14);
+        ctx.lineTo(ex + Math.cos(ang + 2.6) * 16, ey + Math.sin(ang + 2.6) * 16);
+        ctx.lineTo(ex + Math.cos(ang - 2.6) * 16, ey + Math.sin(ang - 2.6) * 16);
+        ctx.closePath();
+        ctx.fillStyle = col; ctx.fill();
+        /* 兵力小牌（行军中兵力） */
+        const bw2 = HW * 0.44, bx2 = hx - bw2 / 2, by2 = hy + HH * 0.18;
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(8,14,22,0.92)';
+        ctx.beginPath();
+        ctx.moveTo(bx2 + 4, by2); ctx.lineTo(bx2 + bw2 - 4, by2); ctx.quadraticCurveTo(bx2 + bw2, by2, bx2 + bw2, by2 + 4);
+        ctx.lineTo(bx2 + bw2, by2 + HH * 0.5 - 4); ctx.quadraticCurveTo(bx2 + bw2, by2 + HH * 0.5, bx2 + bw2 - 4, by2 + HH * 0.5);
+        ctx.lineTo(bx2 + 4, by2 + HH * 0.5); ctx.quadraticCurveTo(bx2, by2 + HH * 0.5, bx2, by2 + HH * 0.5 - 4);
+        ctx.lineTo(bx2, by2 + 4); ctx.quadraticCurveTo(bx2, by2, bx2 + 4, by2);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = '700 ' + Math.round(T * 0.22) + 'px system-ui, sans-serif';
+        ctx.fillText(String(m.n), hx, by2 + HH * 0.38);
+        ctx.restore();
+        continue;
+      }
+    }
+
+    /* ---- ④ 选中 / 放置幽灵 / 铺路预览 / 塔射程（菱形化） ---- */
+    this.drawSelectionIso(ctx, T);
+    this.drawDropPreviewIso(ctx, T);
+    this.drawRoadPreviewIso(ctx, T);
+    this.drawTowerRangeIso(ctx, T);
+    if (global.UI && global.UI.placeMode) this.drawPlaceModeIso(ctx, T);
+
+    /* ---- ⑤ 信息牌（收益牌 / 建筑名牌，复用 drawBannerPlate） ---- */
+    this.drawMapLabelsIso(ctx, T);
+
+    /* ---- ⑥ 部队移动轨迹涟漪 ---- */
+    this.drawMovesIso(ctx, T);
+  },
+
+  /** 部队兵力旗标（作战沙盘式）：旗杆 + 三角旗 + 兵力牌；滞留时旗面灰色 */
+  isoTroopBadge(ctx, gx, gy, side, n, stranded) {
+    const T = CFG.map.tile, HW = this.isoHW(), HH = this.isoHH();
+    const cx = this.tileCX(gx, gy), cy = this.tileCY(gx, gy);
+    /* ★ 第八十一次修订：等轴部队改回圆形徽章（与正交一致；旗杆+方块牌弃用） */
+    const col = side === 'p1' ? '#2f6fb8' : '#c0392b';
+    const r = HW * 0.34;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8,14,22,0.92)'; ctx.fill();
+    if (stranded) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = stranded ? 2 : 3; ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 ' + Math.round(T * 0.27) + 'px system-ui, sans-serif';
+    ctx.fillText(String(n), cx, cy + T * 0.02);
+    if (stranded) {
+      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      ctx.font = '600 ' + Math.round(T * 0.15) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('待命', cx, cy + T * 0.42);
+    }
+  },
+
+  /** 选中格 / 拖拽目标格（等轴） */
+  drawSelectionIso(ctx, T) {
+    const S = this.state;
+    if (S && S.sel) {
+      ctx.save();
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3;
+      this.diamondPath(ctx, S.sel.gx, S.sel.gy); ctx.stroke();
+      ctx.restore();
+    }
+    if (this.dragging && this.dragging.gx !== undefined) {
+      ctx.save();
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 2.5;
+      this.diamondPath(ctx, this.dragging.gx, this.dragging.gy); ctx.stroke();
+      ctx.restore();
+    }
+  },
+
+  /** 建造占地幽灵（等轴）：整块占地菱形组 + 状态色 */
+  drawFootGhostIso(ctx, T, gx, gy, fp, state) {
+    const V = CFG.mapVisual;
+    const P = V && V.place ? V.place : {};
+    const fill = state === 'merge' ? P.mergeFill : state === 'bad' ? P.badFill : P.okFill;
+    const edge = state === 'merge' ? P.mergeEdge : state === 'bad' ? P.badEdge : P.okEdge;
+    for (let dy = 0; dy < fp.h; dy++) {
+      for (let dx = 0; dx < fp.w; dx++) {
+        ctx.save();
+        this.diamondPath(ctx, gx + dx, gy + dy);
+        ctx.fillStyle = fill; ctx.fill();
+        ctx.strokeStyle = edge; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.restore();
+      }
+    }
+  },
+
+  drawDropPreviewIso(ctx, T) {
+    const d = this.dropPreview;
+    if (!d) return;
+    const G = global.Game;
+    if (d.gx === undefined || d.gy === undefined) return;
+    const fp = G.footOf(d.key);
+    const merge = G.canMerge(d.handIdx, d.gx, d.gy);
+    const ok = !merge && G.canBuildAt(d.key, d.gx, d.gy);
+    this.drawFootGhostIso(ctx, T, d.gx, d.gy, fp, merge ? 'merge' : (ok ? 'ok' : 'bad'));
+  },
+
+  drawRoadPreviewIso(ctx, T) {
+    const G = global.Game;
+    if (!G || !global.UI || !UI.roadPlacing) return;
+    for (let gy = 0; gy < CFG.map.rows; gy++) {
+      for (let gx = 0; gx < CFG.map.cols; gx++) {
+        if (!G.canPlaceRoadFor('p1', gx, gy)) continue;
+        ctx.save();
+        this.diamondPath(ctx, gx, gy);
+        ctx.fillStyle = 'rgba(180,150,90,0.30)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(230,200,140,0.95)'; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.restore();
+      }
+    }
+  },
+
+  drawTowerRangeIso(ctx, T) {
+    const G = global.Game;
+    const sel = this.state && this.state.sel;
+    if (!G || !sel) return;
+    const t = G.buildingAt(sel.gx, sel.gy);
+    if (!t || t.type !== 'tower') return;
+    const range = 2 + (G.relicCount('p1', 'watchtower') || 0);
+    const cx = this.tileCX(t.gx, t.gy), cy = this.tileCY(t.gx, t.gy);
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#4a9eff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, range * this.isoHW(), range * this.isoHH(), 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  },
+
+  /** 放置模式：跟随光标的占地幽灵（等轴） */
+  drawPlaceModeIso(ctx, T) {
+    const G = global.Game; const UIg = global.UI;
+    if (!G || !G.state || !UIg || !UIg.placeMode) return;
+    const t = this.hoverTile;
+    if (!t) return;
+    const fp = G.footOf(UIg.placeMode.key);
+    const ok = G.canBuildAt(UIg.placeMode.key, t.gx, t.gy);
+    this.drawFootGhostIso(ctx, T, t.gx, t.gy, fp, ok ? 'ok' : 'bad');
+  },
+
+  /** 信息牌（等轴）：收益牌 / 建筑名牌（复用 drawBannerPlate，格心投影） */
+  drawMapLabelsIso(ctx, T) {
+    const G = global.Game;
+    if (!G || !G.state) return;
+    const self = this;
+    const HH = this.isoHH();
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const bFont = '"PingFang SC","Microsoft YaHei",sans-serif';
+    const drawBuildPlate = function (b, name, level, owner, anchorCx, anchorCy) {
+      const txt = level ? name + ' Lv' + level : name;
+      ctx.font = '700 ' + Math.round(T * 0.21) + 'px ' + bFont;
+      const w = Math.max(70, ctx.measureText(txt).width) + T * 0.34;
+      const h = T * 0.36;
+      const topY = anchorCy + HH * 0.9;
+      self.drawBannerPlate(ctx, anchorCx, topY, w, h, owner);
+      ctx.fillStyle = owner === 'p1' ? '#ffd76a' : (owner === 'p2' ? '#ff9c9c' : '#f4f1e4');
+      ctx.fillText(txt, anchorCx, topY + h * 0.62);
+    };
+    for (const k in G.state.buildings) {
+      const b = G.state.buildings[k];
+      /* ★ 第八十一次修订：等轴同正交——建筑牌 hover 显示（hoverTile 为逻辑格，pickTile 双模式兼容） */
+      const fp = G.footOf(b.type);
+      const hv = this.hoverTile;
+      if (!(hv && hv.gx >= b.gx && hv.gx < b.gx + fp.w && hv.gy >= b.gy && hv.gy < b.gy + fp.h)) continue;
+      const cx = this.tileCX(b.gx + (fp.w - 1) / 2, b.gy + (fp.h - 1) / 2);
+      const cy = this.tileCY(b.gx + (fp.w - 1) / 2, b.gy + (fp.h - 1) / 2);
+      drawBuildPlate(b, CFG.buildings[b.type].name, b.level, (b.owner || 'p1') === 'p1' ? 'p1' : 'p2', cx, cy);
+    }
+    /* ★ 主城牌移到 2×2 占地视觉中心正上方（与正交一致） */
+    const mcx = this.tileCX(G.state.castle.gx + 0.5, G.state.castle.gy + 0.5);
+    const mcy = this.tileCY(G.state.castle.gx + 0.5, G.state.castle.gy + 0.5);
+    drawBuildPlate(G.state.castle, '主城', G.state.castleLevel, 'p1', mcx, mcy - HH * 0.95);
+    const ec = G.enemyCastle();
+    const ecx = this.tileCX(ec.gx + 0.5, ec.gy + 0.5), ecy = this.tileCY(ec.gx + 0.5, ec.gy + 0.5);
+    drawBuildPlate(ec, '敌方主城', 1, 'p2', ecx, ecy - HH * 0.95);
+
+    CFG.map.resources.forEach(function (r) {
+      const owner = G.resourceOwnerOf(r);
+      const guard = G.state.resGuard[r.gx + ',' + r.gy] || 0;
+      const yieldTxt = r.res === 'logistics' ? '修路 -1⚡'
+        : ('+' + r.yield + (r.res === 'food' ? '粮' : '⚡'));
+      const l1 = (owner ? (owner === 'p1' ? '★ ' : '✖ ') : '') + r.name;
+      const l2 = yieldTxt + (!owner && guard > 0 ? ' · 守' + guard : '');
+      const x = self.tileCX(r.gx, r.gy), y = self.tileCY(r.gx, r.gy) + HH * 1.05;
+      ctx.font = '700 ' + Math.round(T * 0.20) + 'px ' + bFont;
+      const w1 = ctx.measureText(l1).width;
+      ctx.font = Math.round(T * 0.18) + 'px ' + bFont;
+      const w2 = ctx.measureText(l2).width;
+      const w = Math.min(T * 1.8, Math.max(76, w1, w2) + T * 0.30);
+      const h = T * 0.54;
+      self.drawBannerPlate(ctx, x, y - T * 0.17, w, h, owner);
+      ctx.fillStyle = owner === 'p1' ? '#ffd76a' : (owner === 'p2' ? '#ff9c9c' : '#f4f1e4');
+      ctx.font = '700 ' + Math.round(T * 0.20) + 'px ' + bFont;
+      ctx.fillText(l1, x, y + T * 0.03);
+      ctx.font = Math.round(T * 0.18) + 'px ' + bFont;
+      ctx.fillStyle = '#e8dcc0';
+      ctx.fillText(l2, x, y + T * 0.24);
+    });
+    ctx.restore();
+  },
+
+  /** 部队移动涟漪（等轴） */
+  drawMovesIso(ctx, T) {
+    const now = performance.now();
+    this.moves = (this.moves || []).filter(function (m) { return now - m.t0 < 700; });
+    if (!this.moves.length) return;
+    const self = this;
+    this.moves.forEach(function (m) {
+      const k = Math.min(1, (now - m.t0) / 700);
+      const cx = self.tileCX(m.x1, m.y1), cy = self.tileCY(m.x1, m.y1);
+      ctx.save();
+      ctx.globalAlpha = 0.5 * (1 - k);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3 * (1 - k) + 1;
+      ctx.beginPath(); ctx.ellipse(cx, cy, self.isoHW() * 0.3 + k * self.isoHW() * 0.5, self.isoHH() * 0.3 + k * self.isoHH() * 0.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    });
   },
 };
 

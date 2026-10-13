@@ -81,6 +81,12 @@ function registerDebug() {
     UI.render();
   });
 
+  D.group('地图视觉（实验）');
+  D.check('mapVisual.isoMode', '等轴模式（2:1 标准等轴·手绘沙盘）');
+  D.check('mapVisual.isoPaintedBOn', '等轴底图B：延展铺满（A/B 实机对比）');
+  D.check('mapVisual.terrainProps', '立体地形（山体/树林模型）');
+  D.check('mapVisual.terrainLight.on', '地形光照层（当前限样板区）');
+
   D.group('时间');
   D.slider('time.tick', 1, 60, 1, '经济 Tick 周期（秒）');
   D.slider('time.limit', 0, 1800, 30, '兜底时限（秒 · 0 = 不设上限）');

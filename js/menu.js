@@ -27,7 +27,7 @@ const Menu = {
     this.inited = true;
 
     const c = mcfg();
-    if ($('menu-title')) $('menu-title').textContent = c.title || '卡牌建城';
+    if ($('menu-title')) $('menu-title').textContent = c.title || '把酒论兵';
     if ($('menu-sub')) $('menu-sub').textContent = c.sub || '';
     this.applyBg();
 
@@ -238,32 +238,23 @@ const Menu = {
     });
     body.appendChild(this.row('游戏倍速', seg));
 
-    /* 地图底图 */
-    const pwrap = document.createElement('div');
-    pwrap.className = 'mp-ctl';
-    const pname = document.createElement('b');
-    pname.className = 'mp-val mp-val-wide';
-    const refreshPlate = () => {
-      const V = global.CFG && CFG.mapVisual;
-      const id = global.Sandbox && Sandbox.plateId;
-      pname.textContent = (V && V.plates && V.plates[id] && V.plates[id].name) || '—';
-    };
-    refreshPlate();
-    const pnext = document.createElement('button');
-    pnext.className = 'mp-btn';
-    pnext.textContent = '切换';
-    pnext.addEventListener('click', () => {
-      const V = global.CFG && CFG.mapVisual;
-      if (!V || !V.plates || !global.Sandbox) return;
-      const ids = Object.keys(V.plates);
-      const i = ids.indexOf(Sandbox.plateId);
-      const nx = ids[(i + 1) % ids.length];
-      Sandbox.loadPlate(nx);
-      refreshPlate();
-      if (global.UI && UI.hint) UI.hint('地图底图：' + ((V.plates[nx] && V.plates[nx].name) || nx));
+    /* 地图底图行已删（第八十四次修订）：等轴底图定稿后切换无效（isoMode 恒为真） */
+
+    /* ★ 第八十四次修订：重看新手教程（教程标记带版本后，旧标记不再拦新版本；
+     *   此按钮清标记 → 回对局/开新局 → 重新弹「查看引导 / 跳过」选择界面） */
+    const trewrap = document.createElement('div');
+    trewrap.className = 'mp-ctl';
+    const trebtn = document.createElement('button');
+    trebtn.className = 'mp-btn';
+    trebtn.textContent = '重看教程';
+    trebtn.addEventListener('click', () => {
+      try { global.localStorage.removeItem('ccb_tutorial_asked_v04tavern'); } catch (e) {}
+      this.start(false);                       // 关菜单回对局（没有对局就新开一局）
+      if (global.Tutorial) global.Tutorial.ask();
+      if (global.UI && UI.hint) UI.hint('新手教程已重置');
     });
-    pwrap.appendChild(pname); pwrap.appendChild(pnext);
-    body.appendChild(this.row('地图底图', pwrap));
+    trewrap.appendChild(trebtn);
+    body.appendChild(this.row('新手教程', trewrap));
 
     /* 提示 + 返回 */
     const tip = document.createElement('p');
@@ -278,46 +269,75 @@ const Menu = {
     body.appendChild(back);
   },
 
-  /* ---------------- 玩法说明 ---------------- */
+  /* ---------------- 玩法说明（品牌版：分节排版，2026-10-13） ---------------- */
 
   buildHelp(body) {
-    const ul = document.createElement('ul');
-    ul.className = 'mp-list';
-    [
-      '目标：摧毁敌方主城获胜；30 分钟兜底（到时按综合分判胜负）。',
-      '三步循环：抽卡 → 建城 → 出兵 → 抢资源点/占敌方建筑 → 再经营。',
-      '抽卡：右下角「🎴 抽卡」花 1⚡ 翻 5 张候选，按标价买进手牌（可反复重开，费用递增）。',
-      '建城：把手牌拖到地图空地；新建筑必须挨着自己的道路或建筑（城市沿路生长）。',
-      '修路：道路牌铺路，军队只能沿自己的路网行军；抢资源点先修路。',
-      '抢点：清掉资源点守军即可占领，之后每 10 秒产出一次，不需要驻守。',
-      '战争：数量抵消（同格立即结算，少者全灭）；攻城 1 兵换 1 点防御值，防御值归零即占领。',
-      '建筑等级上限 = 主城等级（最高 Lv3）；升级要花「升级牌」，或把同类卡拖到已有建筑上合成。',
-      '开局与每次主城升级触发一次「政策三选一」；每 3 分钟一张「事件牌」（全部带代价）；',
-      '右下角「📋 任务」是星级任务，每完成一星给一件遗物（永久 buff）。',
-      '操作：拖动沙盘平移 / 滚轮缩放 / 点我方部队再点建筑派兵 / Esc 取消当前操作。',
-    ].forEach((t) => {
-      const li = document.createElement('li');
-      li.textContent = t;
-      ul.appendChild(li);
+    const wrap = document.createElement('div');
+    wrap.className = 'mp-help';
+    const SECS = [
+      ['目标与循环', [
+        '目标：摧毁敌方主城获胜；30 分钟兜底（到时按综合分判胜负）。',
+        '循环：抽卡 → 建城 → 出兵 → 抢资源点/占敌方建筑 → 再经营。',
+      ]],
+      ['卡牌与建城', [
+        '抽卡：右下角「🎴 抽卡」花 1⚡ 翻 5 张候选，按标价买进手牌（可反复重开，费用递增）。',
+        '建城：把手牌拖到地图空地；新建筑必须挨着自己的道路或建筑（城市沿路生长）。',
+        '修路：道路牌铺路，军队只能沿自己的路网行军；抢资源点先修路。每占一座物流点，铺路单价 -1⚡。',
+      ]],
+      ['战争与争夺', [
+        '抢点：清掉资源点守军即可占领，之后每 10 秒产出一次，不需要驻守。',
+        '战争：数量抵消（同格立即结算，少者全灭）；攻城 1 兵换 1 点防御值，防御值归零即占领。',
+        '升级：建筑等级上限 = 主城等级（最高 Lv3）；升级要花「升级牌」，或把同类卡拖到已有建筑上合成。',
+      ]],
+      ['局外系统', [
+        '政策：开局与每次主城升级触发一次「政策三选一」。',
+        '事件：每 3 分钟一张「事件牌」（全部带代价）。',
+        '任务：右下角「📋 任务」是星级任务，每完成一星给一件遗物（永久 buff）。',
+      ]],
+      ['操作', [
+        '拖动沙盘平移 / 滚轮缩放 / 点我方部队再点建筑派兵 / Esc 取消当前操作。',
+      ]],
+    ];
+    SECS.forEach(([h, items]) => {
+      const sec = document.createElement('div');
+      sec.className = 'mh-sec';
+      const hEl = document.createElement('div');
+      hEl.className = 'mh-h';
+      hEl.textContent = h;
+      sec.appendChild(hEl);
+      const ul = document.createElement('ul');
+      ul.className = 'mp-list';
+      items.forEach((t) => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        ul.appendChild(li);
+      });
+      sec.appendChild(ul);
+      wrap.appendChild(sec);
     });
-    body.appendChild(ul);
+    body.appendChild(wrap);
   },
 
-  /* ---------------- 制作信息 ---------------- */
+  /* ---------------- 制作信息（品牌版，2026-10-13） ---------------- */
 
   buildAbout(body) {
     const c = mcfg();
     const wrap = document.createElement('div');
     wrap.className = 'mp-about';
-    [
-      c.credit || '',
-      '版本：V0.4（卡驱动 + 道路系统）',
-      '技术：原生 JavaScript + Canvas/DOM，零依赖、零构建，双击 index.html 即可运行。',
-      '验证：五层自动化测试（逻辑 / 渲染 / 交互 / DOM 引用 / 调参路径）+ 真实浏览器全流程回归。',
-    ].forEach((t) => {
-      if (!t) return;
+    const rows = [
+      ['游戏', '《把酒论兵》—— 一桌山河 · 满手谋略'],
+      ['版本', 'V0.4 Demo（酒馆桌上战争推演）'],
+      c.credit ? ['团队', c.credit] : null,
+      ['技术', '原生 JavaScript + Canvas/DOM，零依赖、零构建，双击 index.html 即可运行。'],
+      ['验证', '七层自动化门禁（逻辑 / 渲染 / 交互 / DOM 引用 / 调参路径 / 真浏览器全流程 / 遮挡审计）。'],
+    ].filter(Boolean);
+    rows.forEach(([k, v]) => {
       const p = document.createElement('p');
-      p.textContent = t;
+      const b = document.createElement('b');
+      b.className = 'mp-k';
+      b.textContent = k;
+      p.appendChild(b);
+      p.appendChild(document.createTextNode('　' + v));
       wrap.appendChild(p);
     });
     body.appendChild(wrap);

@@ -437,6 +437,25 @@
       this._row(label || path, range, val);
     },
 
+    /** 绑定 CFG 布尔开关到 checkbox，勾选即时生效（第七十八次修订补充：等轴模式等视觉开关） */
+    check(path, label) {
+      const target = global.CFG || {};
+      const init = util.getPath(target, path);
+      if (init == null) return;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!init;
+      cb.addEventListener('change', () => {
+        util.setPath(target, path, cb.checked);
+        if (global.Sandbox) {
+          if (global.Sandbox.clampCam) global.Sandbox.clampCam();
+          if (global.Sandbox.render) global.Sandbox.render();
+        }
+        if (global.UI && global.UI.render) global.UI.render();
+      });
+      this._row(label || path, cb);
+    },
+
     /** 分组小标题（纯展示） */
     group(title) {
       if (!this.body) return;

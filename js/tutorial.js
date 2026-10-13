@@ -19,7 +19,7 @@
   const STEPS = [
     {
       id: 'welcome',
-      text: '欢迎来到《卡牌建城》！<br>目标：<b>摧毁敌方主城</b>获胜（30 分钟兜底按综合分判胜）。<br>跟完这 6 步，你就学会开局。',
+      text: '欢迎来到《把酒论兵》！<br>目标：<b>摧毁敌方主城</b>获胜（30 分钟兜底按综合分判胜）。<br>跟着下面几步，你就学会开局。',
       center: true,
       btn: '开始',
     },
@@ -43,14 +43,30 @@
     },
     {
       id: 'build',
-      text: '<b>按住这张卡</b>拖到地图上主城旁的高亮空格 —— 新建筑必须挨着道路或建筑（城市沿路生长）。',
+      text: '<b>点击这张卡</b> → 再点击地图上主城旁的高亮空格，即可建造（也可以直接拖过去）。<br>新建筑必须挨着道路或建筑 —— 城市沿路生长。',
       target: '#hand-slots .card',
       wait: () => { const S = global.Game && global.Game.state; return !!(S && Object.keys(S.buildings).length > 0); },
     },
     {
+      /* ★ 第八十一次修订：主城升级面板 + 政策联动是新交互，加一步专门讲。
+       *   居中讲解式（同 capture 步），不设 wait —— 升级要花能量，不强制新手当场操作。 */
+      id: 'castle',
+      text: '点击你的<b>主城</b>打开升级面板：<b>升级</b>会提高防御、解锁建筑等级与数量上限，还能让<b>政策品质</b>更高。<br>升级完成后会自动进入<b>政策三选一</b> —— 升主城和选政策是一体的。',
+      center: true,
+      btn: '知道了',
+    },
+    {
       /* ★ 第七十一次修订（方案D）：新玩家"不知道要去争夺资源点" —— 加一步专门讲。 */
       id: 'capture',
-      text: '地图上散布着 <b>9 处资源点</b>：粮仓（+50 粮/Tick）、能量水晶（+12 ⚡/Tick）、哨塔（自动铺路）。<br><b>占领后有持续产出</b>，中期的攻防就围绕它们拉锯。<br>打法：<b>修路</b>连过去 → <b>兵营造兵</b> → <b>点击己方部队</b> → <b>点击资源点</b>，清掉守军即占领。<br>敌方也在抢 —— 谁控制资源点，谁就滚雪球。',
+      text: '地图上散布着 <b>9 处资源点</b>：粮仓（+50 粮/Tick）、能量水晶（+12 ⚡/Tick）、哨塔（自动铺路）。<br><b>占领后有持续产出</b>，中期的攻防就围绕它们拉锯。<br>打法：<b>修路</b>连过去 → <b>兵营造兵</b> → <b>点击己方部队</b> → <b>点击资源点</b>，清掉守军即占领（每占一座<b>物流点</b>，铺路单价 -1⚡）。<br>⚠️ <b>路只能铺在草地上</b>——森林、山地、水面都不可铺，规划路线时绕开它们。<br>敌方也在抢 —— 谁控制资源点，谁就滚雪球。',
+      center: true,
+      btn: '知道了',
+    },
+    {
+      /* ★ 第八十四次修订：补弃牌教学（星级任务含弃牌任务，新手手牌满却不知道怎么弃）
+       *   与新弃牌交互（点击即弃）同步。居中讲解式，不设 wait。 */
+      id: 'discard',
+      text: '手牌满了怎么办？点右下角的<b>「弃牌」</b>进入弃牌模式，<b>连续点击想丢掉的牌</b>即可逐张弃掉（Esc 退出）。<br>星级任务里有<b>弃牌任务</b>，弃牌也是资源。',
       center: true,
       btn: '知道了',
     },
@@ -71,7 +87,7 @@
      *   （换浏览器或清站点数据会再弹，属正常。）返回值：本次是否真的弹了。 */
     ask() {
       let asked = false;
-      try { asked = global.localStorage.getItem('ccb_tutorial_asked') === '1'; } catch (e) { /* 隐私模式等忽略 */ }
+      try { asked = global.localStorage.getItem('ccb_tutorial_asked_v04tavern') === '1'; } catch (e) { /* 隐私模式等忽略 */ }
       if (asked) return false;
       const S = global.Game && global.Game.state;
       if (S) S.paused = true;                    // 选择界面期间也停表
@@ -82,7 +98,7 @@
 
     choose(accept) {
       /* 无论选哪边都算"已询问" —— 之后不再弹（用户拍板的行为） */
-      try { global.localStorage.setItem('ccb_tutorial_asked', '1'); } catch (e) {}
+      try { global.localStorage.setItem('ccb_tutorial_asked_v04tavern', '1'); } catch (e) {}
       const el = $('tut-choice');
       if (el) el.classList.add('hidden');
       if (!accept) {

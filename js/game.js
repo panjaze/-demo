@@ -122,7 +122,7 @@ const Game = {
     S.resGuard = {};
     // 中立资源点自带守军，清空才能占领
     CFG.map.resources.forEach(function (r) { S.resGuard[r.gx + ',' + r.gy] = CFG.hp.resourceGuard; });
-    /* 初始官道（第三十次修订）：底图里实际画出来的主干道，开局就是路网的一部分 */
+    /* 初始路网（第八十二次修订）：只有两座桥（preset 路，不可拆、不计额度） */
     (CFG.map.initialRoads || []).forEach(function (r) {
       S.roads[r.gx + ',' + r.gy] = { side: 'p1', preset: true };
     });
@@ -360,16 +360,21 @@ const Game = {
   },
 
   /**
-   * ★ 第四十七次修订：该格「将来可以铺成路」—— 空地 + 非资源点 + 非水面。
+   * ★ 第四十七次修订：该格「将来可以铺成路」—— 空地 + 非资源点 + 非障碍地形。
    * **故意不看是否已与路网相邻** —— 路径规划要能在「将来才会变成路」的格上走，
    * 而 canPlaceRoad 基于**当前**状态（相邻必须有路），规划时用它会一步都走不出去。
    * 路径的连续性保证了按顺序逐格铺时，轮到某格时它的前驱已成路 → canPlaceRoad 必然成立。
+   * ★ 2026-10-13 用户拍板：**只有草地可以铺路**——森林/山地/水域全部绕开
+   *   （障碍物真实存在、增强策略性）。历史上曾因死局撤销过 F/M 限制（第三十一次修订），
+   *   本轮用连通性工具复验：仅需桥东岸 (13,8) 一格由森林改草地（config 地形表已改），
+   *   全图即连通（p1/p2 各 295 格对称可达，9 资源点+双方主城全通）。
    */
   roadableTile(gx, gy) {
     if (!this.isEmptyTile(gx, gy)) return false;
     if (this.resourceAt(gx, gy)) return false;
     if (this.isRoadAt(gx, gy)) return false;
-    if (this.terrainAt(gx, gy) === 'W') return false;    // 水面不能铺路（桥是唯一过河通道）
+    const t = this.terrainAt(gx, gy);
+    if (t === 'W' || t === 'F' || t === 'M') return false;   // 水/森林/山地：只有草地能铺路
     return true;
   },
 
@@ -382,7 +387,7 @@ const Game = {
    */
   canPlaceRoadFor(side, gx, gy) {
     if (!this.canPlaceRoad(gx, gy)) return false;
-    /* 第四十六次修订：道路额度上限（用户拍板的方案 A）。预设官道不占额度。 */
+    /* 第四十六次修订：道路额度上限（用户拍板的方案 A）。桥等 preset 路不占额度。 */
     if (this.roadBudgetLeft(side) <= 0) return false;
     const f = this.roadFrontier(side);
     for (let i = 0; i < f.length; i++) {
@@ -414,7 +419,7 @@ const Game = {
 
   /**
    * 铺一格路。side = 出资方（第四十六次修订）：
-   * 记在路对象上，用来算"每方道路额度"（预设官道/桥没有 side，不计入任何一方）。
+   * 记在路对象上，用来算"每方道路额度"（桥等 preset 路不计入额度，见 roadBudgetLeft）。
    * ⚠️ 调用方务必传对 side —— 漏传会默认算成 p1，把 AI 的路记到玩家头上。
    */
   placeRoad(gx, gy, side) {
@@ -427,7 +432,7 @@ const Game = {
     return true;
   },
 
-  /** 某方**主动铺设**的道路格数（预设官道/桥带 preset 标记，不计入额度） */
+  /** 某方**主动铺设**的道路格数（桥等 preset 路带 preset 标记，不计入额度） */
   roadCountOf(side) {
     const R = this.state.roads, who = side || 'p1';
     let n = 0;
@@ -447,14 +452,27 @@ const Game = {
    */
   roadUnitPrice(side) {
     const step = CFG.map.roadPriceStep || 20;
-    return CFG.cards.roads.dirt.price + Math.floor(this.roadCountOf(side || 'p1') / step);
+    /* ★ 第八十四次修订（用户拍板）：物流点新收益 —— 每占领一座物流点，铺一格单价 -1⚡
+     *   （下限 1）。AI 与玩家共用本单价源 → AI 占物流点同样享受，成本天然对称。
+     *   「自动铺路（每 60s 免费铺 1 格）」保留不变。 */
+    const base = CFG.cards.roads.dirt.price + Math.floor(this.roadCountOf(side || 'p1') / step);
+    return Math.max(1, base - this.logisticsCountOf(side || 'p1'));
   },
 
-  /** 拆掉一格自己铺的路，释放额度（"铺拆结合"；预设官道/桥不可拆） */
+  /** 该 side 已占领的物流点数量（第八十四次修订，道路折扣用） */
+  logisticsCountOf(side) {
+    let n = 0;
+    (this.state.resources || []).forEach((r) => {
+      if (r.res === 'logistics' && this.resourceOwnerOf(r) === (side || 'p1')) n++;
+    });
+    return n;
+  },
+
+  /** 拆掉一格自己铺的路，释放额度（"铺拆结合"；桥等 preset 路不可拆） */
   demolishRoad(gx, gy, side) {
     const k = this.tileKeyOf(gx, gy);
     const r = this.state.roads[k];
-    /* ⚠️ 必须排掉 preset：预设官道/桥也带 side:'p1'（为了不让它们占额度才加的 preset 标记），
+    /* ⚠️ 必须排掉 preset：桥也带 side:'p1'（为了不让它占额度才加的 preset 标记），
      *   只判 side 会让玩家把桥拆掉、把地图走断。（这条是 §10e 用例抓出来的） */
     if (!r || r.side !== (side || 'p1') || r.preset) return false;
     delete this.state.roads[k];
@@ -1155,10 +1173,9 @@ const Game = {
       targets.push({ gx: foeHome.gx, gy: foeHome.gy });
       let best = null, bestD = 1e9;
       self.roadFrontier(side).forEach(function (c) {
-        // 官道偏好：同距离下优先沿旧官道开垦（第三十五次修订）
         const d = Math.min.apply(null, targets.map(function (t) {
           return Math.abs(c.gx - t.gx) + Math.abs(c.gy - t.gy);
-        })) - (self.isOfficialRoad(c.gx, c.gy) ? 0.5 : 0);
+        }));
         if (d < bestD) { bestD = d; best = c; }
       });
       if (best && self.placeRoad(best.gx, best.gy, side)) {
@@ -2098,17 +2115,6 @@ const Game = {
     return false;
   },
 
-  /** 官道路基判定（第三十五次修订）：底图画出的旧官道走向。
-   *  纯叙事 + AI 铺路偏好——机制上与普通铺路完全一致（用户拍板：开垦只是一种说法）。 */
-  isOfficialRoad(gx, gy) {
-    if (!this._officialSet) {
-      const m = {};
-      (CFG.map.officialRoads || []).forEach(function (r) { m[r.gx + ',' + r.gy] = 1; });
-      this._officialSet = m;
-    }
-    return !!this._officialSet[gx + ',' + gy];
-  },
-
   /**
    * 己方连通路网的「铺路前沿」：从主城 BFS 沿可通行格（道路/己方建筑/主城）蔓延，
    * 收集紧邻前沿的可铺路格。**铺路必须沿前沿生长** —— 否则贪心会在目标附近铺出
@@ -2142,11 +2148,18 @@ const Game = {
    *   与业界一致（《三国:谋定天下》选目标→系统规划最优路线→连续铺；《率土之滨》直线推进）。
    */
 
-  /** 四向邻格里有没有道路（**只算路**，不含建筑/主城）—— 用于判断「资源点是否已经通路」 */
-  adjHasRoad(gx, gy) {
+  /**
+   * 四向邻格里有没有**可通行格**（道路/主城占地/己方建筑）—— 用于判断「资源点是否已经可达」。
+   * ★ 2026-10-13：语义从旧版 adjHasRoad（只认路）放宽 —— 行军 findPath 的"最后一步"可以
+   *   直接从相邻可通行格踏上目标格，所以**贴着主城/建筑的资源点本就不需要修路**。
+   *   旧判定会把它当成"还没通路"反复选为目标：planRoadPath 因"最接近格已可通行"返回空路径、
+   *   目标却永远锁定 → 铺路永久空转（脚本玩家跑批瘫痪的另一半根因；AI 同款潜在死锁，
+   *   只是它的初盘资源恰好都不贴可通行格而没暴露）。
+   */
+  adjWalkable(gx, gy, side) {
     const D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     for (let i = 0; i < D.length; i++) {
-      if (this.isRoadAt(gx + D[i][0], gy + D[i][1])) return true;
+      if (this.walkable(gx + D[i][0], gy + D[i][1], side)) return true;
     }
     return false;
   },
@@ -2178,10 +2191,10 @@ const Game = {
       return Math.abs(x - home.gx) + Math.abs(y - home.gy) <=
              Math.abs(x - foe.gx) + Math.abs(y - foe.gy);
     };
-    // 候选资源点：未占 + 还没通路 + 在本方半区（半区外的铺不到，别浪费一个目标位）
+    // 候选资源点：未占 + 还"不可达"（可通行格不相邻 → 真的需要修路）+ 在本方半区
     const open = CFG.map.resources.filter(function (r) {
       if (S.resourceOwner[r.gx + ',' + r.gy] === side) return false;
-      if (self.adjHasRoad(r.gx, r.gy)) return false;
+      if (self.adjWalkable(r.gx, r.gy, side)) return false;   // ★ 2026-10-13：adjHasRoad → adjWalkable（见方法注释）
       return halfOK(r.gx, r.gy);
     });
     const mine = side === 'p1' ? this.myBuildings() : this.enemyBuildings();
@@ -2212,8 +2225,8 @@ const Game = {
    * Dijkstra（h ≡ 0 —— 图只有 29×15，不值得为效率引入堆；h 若取曼哈顿会高估
    * 实际权重、让「优先复用已有路」不再最优）：
    *   - 走己方可走格（道路/己方建筑/主城）代价 **0** → 优先复用已有路，不重复铺
-   *   - 走「将来可铺的空格」（roadableTile）代价 **1**，其中**官道格 0.5**
-   *     （§14.1 第三十五次修订的官道偏好：同距离下优先沿旧官道开垦）
+   *   - 走「将来可铺的空格」（roadableTile）代价 **1**
+   *     （★ 第八十二次修订：移除官道格 0.5 偏好——官道路基设定已连根删除）
    *   - 半区限制沿用旧规则：只在自己半区铺（最后一段走对方的路，道路是互通的）
    *   - **到不了目标时退化为「朝目标推进到能到的最远处」**（AI 会一路推到中线就停），
    *     否则 A* 一旦失败就返回空 → AI 再也不铺路，等于把 AI 的手绑住。
@@ -2264,7 +2277,7 @@ const Game = {
         if (done[nk]) continue;
         let w;
         if (self.walkable(nx, ny, side)) w = 0;                                        // 复用已有路：不要钱
-        else if (self.roadableTile(nx, ny)) w = self.isOfficialRoad(nx, ny) ? 0.5 : 1;  // 官道偏好 §14.1
+        else if (self.roadableTile(nx, ny)) w = 1;
         else continue;
         const nd = base + w;
         if (dist[nk] === undefined || nd < dist[nk]) {
@@ -2282,7 +2295,9 @@ const Game = {
       const h = hOf(+p[0], +p[1]);
       if (h < bestH || (h === bestH && k < bestK)) { bestH = h; bestK = k; }
     });
-    if (bestH >= hOf(home.gx, home.gy)) return [];   // 一步都推不出去（该方向已到头）
+    if (bestH >= hOf(home.gx, home.gy)) {   // 一步都推不出去（该方向已到头）
+      return [];
+    }
     /* ③ 回溯：只保留「需要新铺的空格」（现成的路不入列表） */
     const path = [];
     let cur = bestK;
